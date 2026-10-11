@@ -18,33 +18,27 @@ import {
   collection,
   addDoc,
   getDocs,
+  updateDoc,
+  deleteDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-const VERSION = "0.3.0";
+const VERSION = "1.0.0";
 const $ = id => document.getElementById(id);
+
+let currentUser = null;
+let businessProfile = {};
+let busy = false;
+let authMode = "login";
+let activePage = "dashboard";
+let cache = { transactions: [], customers: [], projects: [], inventory: [] };
 
 const authScreen = $("authScreen");
 const dashboard = $("dashboard");
 const authForm = $("authForm");
 const authMessage = $("authMessage");
-const nameField = $("nameField");
-const nameInput = $("name");
-const emailInput = $("email");
-const passwordInput = $("password");
-const submitButton = $("submitButton");
-const toggleMode = $("toggleMode");
-const forgotButton = $("forgotButton");
-const googleButton = $("googleButton");
 
-let authMode = "login";
-let busy = false;
-let currentUser = null;
-let businessProfile = null;
-let records = [];
-let customers = [];
-
-function message(text, type = "error") {
+function showMessage(text, type = "error") {
   authMessage.textContent = text;
   authMessage.className = `message ${type}`;
   authMessage.hidden = false;
@@ -55,220 +49,219 @@ function clearMessage() {
   authMessage.textContent = "";
 }
 
-function setBusy(value) {
-  busy = value;
-  submitButton.disabled = value;
-  googleButton.disabled = value;
-  submitButton.textContent = value
-    ? "Please wait..."
-    : authMode === "login" ? "Sign In" : "Create Account";
+function errorText(error) {
+  const known = {
+    "auth/invalid-email": "Enter a valid email address.",
+    "auth/weak-password": "Use a password with at least 6 characters.",
+    "auth/email-already-in-use": "This email already has an account. Please sign in.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+    "auth/popup-closed-by-user": "Google sign-in was cancelled.",
+    "auth/popup-blocked": "Allow popups and try again.",
+    "auth/unauthorized-domain": "Add your website domain in Firebase Authorized domains.",
+    "permission-denied": "Firebase denied access. Check your Firestore Rules."
+  };
+  return known[error?.code] || error?.message || "Something went wrong.";
 }
 
-function setMode(mode) {
+function setAuthMode(mode) {
   authMode = mode;
   clearMessage();
 
   const registering = mode === "register";
-  $("authTitle").textContent = registering
-    ? "Create your account" : "Welcome back";
+  $("authTitle").textContent = registering ? "Create your account" : "Welcome back";
   $("authSubtitle").textContent = registering
     ? "Start managing your business with NEXORA."
     : "Sign in to continue to your workspace.";
 
-  nameField.hidden = !registering;
-  nameInput.required = registering;
-  forgotButton.hidden = registering;
-  toggleMode.textContent = registering
+  $("nameField").hidden = !registering;
+  $("name").required = registering;
+  $("forgotButton").hidden = registering;
+  $("submitButton").textContent = registering ? "Create Account" : "Sign In";
+  $("toggleMode").textContent = registering
     ? "Already have an account? Sign in"
     : "New to NEXORA? Create an account";
-
-  submitButton.textContent = registering
-    ? "Create Account" : "Sign In";
 }
 
-function friendlyError(error) {
-  const errors = {
-    "auth/invalid-email": "Enter a valid email address.",
-    "auth/weak-password": "Password must contain at least 6 characters.",
-    "auth/email-already-in-use": "This email already has an account. Sign in instead.",
-    "auth/invalid-credential": "Email or password is incorrect.",
-    "auth/popup-closed-by-user": "Google sign-in was cancelled.",
-    "auth/popup-blocked": "Allow popups and try Google sign-in again.",
-    "auth/unauthorized-domain": "Add this website domain in Firebase Authorized domains.",
-    "auth/network-request-failed": "Check your internet connection.",
-    "permission-denied": "Firestore denied access. Check your Firebase rules."
-  };
-  return errors[error?.code] || error?.message || "Something went wrong.";
-}
-
-async function saveUserProfile(user, name = "") {
+async function saveProfile(user, displayName = "") {
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
 
-  const profile = {
+  const data = {
     uid: user.uid,
-    name: user.displayName || name || user.email?.split("@")[0] || "User",
+    name: user.displayName || displayName || user.email?.split("@")[0] || "User",
     email: user.email || "",
     updatedAt: serverTimestamp()
   };
 
   if (!snap.exists()) {
-    profile.createdAt = serverTimestamp();
-    profile.role = "user";
-    profile.plan = "free";
-    await setDoc(ref, profile);
-  } else {
-    await setDoc(ref, profile, { merge: true });
+    Object.assign(data, {
+      createdAt: serverTimestamp(),
+      role: "user",
+      plan: "free"
+    });
   }
+
+  await setDoc(ref, data, { merge: true });
 }
 
-function showLogin() {
-  dashboard.hidden = true;
-  authScreen.hidden = false;
-}
-
-function showDashboard(user) {
-  authScreen.hidden = true;
-  dashboard.hidden = false;
-
-  const name = user.displayName || user.email?.split("@")[0] || "User";
-  $("welcomeName").textContent = name;
-  $("welcomeNameInline").textContent = name;
-  $("userEmail").textContent = user.email || "";
-  $("avatar").textContent = name.charAt(0).toUpperCase();
-  $("versionLabel").textContent = `NEXORA v${VERSION} · Business workspace`;
-}
+$("toggleMode").addEventListener("click", () => {
+  setAuthMode(authMode === "login" ? "register" : "login");
+});
 
 authForm.addEventListener("submit", async event => {
   event.preventDefault();
   if (busy) return;
 
+  busy = true;
   clearMessage();
-  setBusy(true);
+  $("submitButton").disabled = true;
+  $("googleButton").disabled = true;
 
   try {
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
+    const email = $("email").value.trim();
+    const password = $("password").value;
 
     if (authMode === "register") {
-      const name = nameInput.value.trim();
-      if (name.length < 2) throw new Error("Enter your name.");
+      const name = $("name").value.trim();
+      if (name.length < 2) throw new Error("Enter your full name.");
 
-      const result = await createUserWithEmailAndPassword(
-        auth, email, password
-      );
+      const result = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(result.user, { displayName: name });
-      await saveUserProfile(result.user, name);
-      message("Account created successfully.", "success");
+      await saveProfile(result.user, name);
     } else {
       const result = await signInWithEmailAndPassword(auth, email, password);
-      await saveUserProfile(result.user);
+      await saveProfile(result.user);
     }
   } catch (error) {
-    message(friendlyError(error));
+    showMessage(errorText(error));
   } finally {
-    setBusy(false);
+    busy = false;
+    $("submitButton").disabled = false;
+    $("googleButton").disabled = false;
   }
 });
 
-googleButton.addEventListener("click", async () => {
-  if (busy) return;
-  clearMessage();
-  setBusy(true);
-
+$("googleButton").addEventListener("click", async () => {
   try {
+    clearMessage();
     const result = await signInWithPopup(auth, googleProvider);
-    await saveUserProfile(result.user);
+    await saveProfile(result.user);
   } catch (error) {
-    message(friendlyError(error));
-  } finally {
-    setBusy(false);
+    showMessage(errorText(error));
   }
 });
 
-forgotButton.addEventListener("click", async () => {
-  clearMessage();
-  const email = emailInput.value.trim();
-
+$("forgotButton").addEventListener("click", async () => {
+  const email = $("email").value.trim();
   if (!email) {
-    message("Enter your email address first.");
-    emailInput.focus();
+    showMessage("Enter your email address first.");
+    $("email").focus();
     return;
   }
 
   try {
     await sendPasswordResetEmail(auth, email);
-    message("Password reset email sent. Check your inbox.", "success");
+    showMessage("Password reset email sent. Check your inbox.", "success");
   } catch (error) {
-    message(friendlyError(error));
+    showMessage(errorText(error));
   }
-});
-
-toggleMode.addEventListener("click", () => {
-  setMode(authMode === "login" ? "register" : "login");
 });
 
 $("logoutButton").addEventListener("click", () => signOut(auth));
 
-function money(amount) {
-  const currency = businessProfile?.currency || "USD";
+function money(value) {
+  const currency = businessProfile.currency || "PKR";
   try {
     return new Intl.NumberFormat("en", {
       style: "currency",
       currency,
       maximumFractionDigits: 2
-    }).format(amount);
+    }).format(Number(value) || 0);
   } catch {
-    return `${currency} ${Number(amount || 0).toFixed(2)}`;
+    return `${currency} ${(Number(value) || 0).toFixed(2)}`;
   }
 }
 
-function addStyles() {
-  if ($("nexoraExtraStyles")) return;
+function userCollection(name) {
+  if (!currentUser) throw new Error("Please sign in first.");
+  return collection(db, "users", currentUser.uid, name);
+}
+
+async function getRecords(name) {
+  const snap = await getDocs(userCollection(name));
+  return snap.docs.map(item => ({ id: item.id, ...item.data() }));
+}
+
+async function loadAll() {
+  const names = ["transactions", "customers", "projects", "inventory"];
+  const results = await Promise.all(names.map(getRecords));
+
+  names.forEach((name, index) => {
+    cache[name] = results[index];
+  });
+
+  renderPage(activePage);
+}
+
+function addAppStyles() {
+  if ($("nxAppStyles")) return;
 
   const style = document.createElement("style");
-  style.id = "nexoraExtraStyles";
+  style.id = "nxAppStyles";
   style.textContent = `
-    .nx-section{margin:0 0 20px}
-    .nx-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .nx-form label{display:block;color:#aebbd4;font-size:12px}
-    .nx-form input,.nx-form select{display:block;width:100%;margin-top:7px;background:#0a1020;color:#f4f6ff;border:1px solid #2c3854;border-radius:10px;padding:12px}
+    .nx-area{display:grid;gap:16px;margin-top:20px}
+    .nx-card{background:#101629;border:1px solid #26324b;border-radius:16px;padding:20px;min-width:0}
+    .nx-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+    .nx-form label{display:block;color:#aab6d0;font-size:12px}
+    .nx-form input,.nx-form select,.nx-form textarea{width:100%;margin-top:7px;padding:12px;border:1px solid #2c3854;border-radius:10px;background:#0a1020;color:#f4f6ff}
     .nx-form button{grid-column:1/-1}
-    .nx-note{color:#9ba8c4;font-size:12px;line-height:1.6}
-    .nx-record{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #26324b;font-size:13px}
-    .nx-positive{color:#5de0ad}.nx-negative{color:#ff9aa9}
-    .nx-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    .nx-actions button{border:1px solid #354363;background:#18233b;color:#e8edff;border-radius:10px;padding:10px 13px}
-    @media(max-width:520px){.nx-form{grid-template-columns:1fr}}
+    .nx-btn{border:1px solid #354363;border-radius:9px;padding:9px 12px;background:#18233b;color:#e8edff}
+    .nx-primary{border:0;border-radius:10px;padding:12px;background:linear-gradient(110deg,#397ff5,#8b6aff);color:#fff;font-weight:700}
+    .nx-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #26324b}
+    .nx-row:last-child{border-bottom:0}
+    .nx-muted{color:#9ba8c4;font-size:12px;line-height:1.6}
+    .nx-good{color:#5de0ad}.nx-bad{color:#ff9aa9}
+    .nx-table{width:100%;border-collapse:collapse;min-width:480px;font-size:12px}
+    .nx-table th,.nx-table td{text-align:left;padding:12px 9px;border-bottom:1px solid #26324b}
+    .nx-table th{color:#9ba8c4;font-weight:600}
+    .nx-table-wrap{overflow:auto}
+    .nx-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .nx-stat{padding:16px;border:1px solid #26324b;border-radius:12px;background:#0c1324}
+    .nx-stat strong{display:block;font-size:20px;margin-top:8px;overflow-wrap:anywhere}
+    .nx-actions{display:flex;gap:7px;flex-wrap:wrap}
+    .nx-actions button{font-size:11px}
+    .nx-empty{padding:22px 0;color:#9ba8c4;font-size:13px}
+    @media(max-width:650px){.nx-form,.nx-grid{grid-template-columns:1fr}.nx-card{padding:15px}}
   `;
   document.head.appendChild(style);
 }
 
-function createSection(title, description = "") {
+function makeCard(title, description = "") {
   const card = document.createElement("section");
-  card.className = "card nx-section";
+  card.className = "nx-card";
+
   const heading = document.createElement("div");
   heading.className = "card-heading";
 
-  const text = document.createElement("div");
+  const inner = document.createElement("div");
   const h = document.createElement("h3");
   h.textContent = title;
-  text.appendChild(h);
+  inner.appendChild(h);
 
   if (description) {
     const p = document.createElement("p");
     p.textContent = description;
-    text.appendChild(p);
+    inner.appendChild(p);
   }
 
-  heading.appendChild(text);
+  heading.appendChild(inner);
   card.appendChild(heading);
   return card;
 }
 
-function addInput(form, label, name, type = "text", required = true) {
+function addField(form, label, name, type = "text", required = true) {
   const wrapper = document.createElement("label");
-  wrapper.textContent = label;
+  wrapper.append(document.createTextNode(label));
 
   const input = document.createElement("input");
   input.name = name;
@@ -280,6 +273,8 @@ function addInput(form, label, name, type = "text", required = true) {
     input.step = "0.01";
   }
 
+  if (type === "date") input.value = new Date().toISOString().slice(0, 10);
+
   wrapper.appendChild(input);
   form.appendChild(wrapper);
   return input;
@@ -287,7 +282,7 @@ function addInput(form, label, name, type = "text", required = true) {
 
 function addSelect(form, label, name, options) {
   const wrapper = document.createElement("label");
-  wrapper.textContent = label;
+  wrapper.append(document.createTextNode(label));
 
   const select = document.createElement("select");
   select.name = name;
@@ -305,378 +300,564 @@ function addSelect(form, label, name, options) {
   return select;
 }
 
-function addButton(form, text) {
+function addSubmit(form, label = "Save") {
   const button = document.createElement("button");
   button.type = "submit";
-  button.className = "primary";
-  button.textContent = text;
+  button.className = "nx-primary";
+  button.textContent = label;
   form.appendChild(button);
   return button;
 }
 
-function renderBusinessSetup() {
-  const home = $("dashboardHome");
-  $("businessSetup")?.remove();
-
-  const section = createSection(
-    "Set up your business",
-    "Personalize your NEXORA workspace. You can update these details later."
-  );
-  section.id = "businessSetup";
-
+function makeFormCard(title, description, setup, onSave) {
+  const card = makeCard(title, description);
   const form = document.createElement("form");
   form.className = "nx-form";
+  setup(form);
 
-  addInput(form, "Business name", "businessName");
-  addSelect(form, "Profession", "profession", [
-    ["shopkeeper", "Shopkeeper / Retail"],
-    ["freelancer", "Freelancer"],
-    ["developer", "Software Developer"],
-    ["agency", "Agency"],
-    ["wholesaler", "Wholesaler"],
-    ["accountant", "Accountant"],
-    ["consultant", "Consultant"],
-    ["online_seller", "Online Seller"],
-    ["manufacturer", "Manufacturer"],
-    ["other", "Other"]
-  ]);
-
-  addSelect(form, "Currency", "currency", [
-    ["USD", "USD — US Dollar"],
-    ["PKR", "PKR — Pakistani Rupee"],
-    ["GBP", "GBP — British Pound"],
-    ["EUR", "EUR — Euro"],
-    ["AED", "AED — UAE Dirham"],
-    ["SAR", "SAR — Saudi Riyal"]
-  ]);
-
-  const button = addButton(form, "Save Business Profile");
-
+  const button = addSubmit(form);
   form.addEventListener("submit", async event => {
     event.preventDefault();
     button.disabled = true;
 
     try {
-      const data = new FormData(form);
-      const profile = {
-        businessName: String(data.get("businessName")).trim(),
-        profession: String(data.get("profession")),
-        currency: String(data.get("currency")),
-        businessUpdatedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-
-      if (!profile.businessName) throw new Error("Enter a business name.");
-
-      await setDoc(doc(db, "users", currentUser.uid), profile, { merge: true });
-      businessProfile = { ...businessProfile, ...profile };
-      renderWorkspace();
-      await loadBusinessData();
+      await onSave(new FormData(form));
+      form.reset();
+      await loadAll();
     } catch (error) {
-      alert(friendlyError(error));
+      alert(errorText(error));
     } finally {
       button.disabled = false;
     }
   });
 
-  section.appendChild(form);
-  home.prepend(section);
+  card.appendChild(form);
+  return card;
 }
 
-function renderBusinessSummary() {
-  $("businessSummary")?.remove();
+function makeListCard(title, description, items, renderItem) {
+  const card = makeCard(title, description);
 
-  const section = createSection(
-    businessProfile.businessName || "Your business",
-    `${businessProfile.profession || "other"} · ${businessProfile.currency || "USD"}`
-  );
-  section.id = "businessSummary";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "nx-empty";
+    empty.textContent = "No records yet. Add your first record above.";
+    card.appendChild(empty);
+  } else {
+    items.forEach(item => card.appendChild(renderItem(item)));
+  }
 
-  const note = document.createElement("p");
-  note.className = "nx-note";
-  note.textContent = "Your profile is saved to your private Firebase account.";
-  section.appendChild(note);
+  return card;
+}
 
+function makeRow(title, detail, amount = "") {
+  const row = document.createElement("div");
+  row.className = "nx-row";
+
+  const left = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = title || "Untitled";
+  const small = document.createElement("div");
+  small.className = "nx-muted";
+  small.textContent = detail || "";
+  left.append(strong, small);
+
+  const right = document.createElement("strong");
+  right.textContent = amount;
+  row.append(left, right);
+  return row;
+}
+
+async function removeRecord(collectionName, id) {
+  if (!confirm("Delete this record permanently?")) return;
+
+  try {
+    await deleteDoc(doc(db, "users", currentUser.uid, collectionName, id));
+    await loadAll();
+  } catch (error) {
+    alert(errorText(error));
+  }
+}
+
+function addDeleteButton(row, collectionName, id) {
   const actions = document.createElement("div");
   actions.className = "nx-actions";
 
-  const edit = document.createElement("button");
-  edit.type = "button";
-  edit.textContent = "Edit business profile";
-  edit.addEventListener("click", renderBusinessSetup);
-  actions.appendChild(edit);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "nx-btn";
+  button.textContent = "Delete";
+  button.addEventListener("click", () => removeRecord(collectionName, id));
 
-  section.appendChild(actions);
-  $("dashboardHome").prepend(section);
+  actions.appendChild(button);
+  row.appendChild(actions);
+  return row;
 }
 
-function renderWorkspace() {
-  addStyles();
+function businessSetupPage() {
+  const area = $("dynamicWorkspace");
+  const card = makeFormCard(
+    "Business profile",
+    "Choose your business identity, profession and reporting currency.",
+    form => {
+      const name = addField(form, "Business name", "businessName");
+      name.value = businessProfile.businessName || "";
+      addSelect(form, "Profession", "profession", [
+        ["shopkeeper", "Shopkeeper / Retail"],
+        ["freelancer", "Freelancer"],
+        ["developer", "Software Developer"],
+        ["agency", "Agency"],
+        ["wholesaler", "Wholesaler"],
+        ["accountant", "Accountant"],
+        ["consultant", "Consultant"],
+        ["online_seller", "Online Seller"],
+        ["manufacturer", "Manufacturer"],
+        ["other", "Other"]
+      ]).value = businessProfile.profession || "other";
 
-  if (!businessProfile?.businessName) {
-    renderBusinessSetup();
-    $("businessSummary")?.remove();
-    return;
-  }
+      addSelect(form, "Currency", "currency", [
+        ["PKR", "PKR — Pakistani Rupee"],
+        ["USD", "USD — US Dollar"],
+        ["GBP", "GBP — British Pound"],
+        ["EUR", "EUR — Euro"],
+        ["AED", "AED — UAE Dirham"],
+        ["SAR", "SAR — Saudi Riyal"]
+      ]).value = businessProfile.currency || "PKR";
+    },
+    async data => {
+      const businessName = String(data.get("businessName") || "").trim();
+      if (!businessName) throw new Error("Enter a business name.");
 
-  $("businessSetup")?.remove();
-  renderBusinessSummary();
-  renderRecordForm();
-  renderCustomerForm();
-  renderRecentRecords();
-}
+      await setDoc(doc(db, "users", currentUser.uid), {
+        businessName,
+        profession: String(data.get("profession")),
+        currency: String(data.get("currency")),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
 
-function renderRecordForm() {
-  $("recordEntry")?.remove();
-
-  const section = createSection(
-    "Quick financial entry",
-    "Add real income or expenses. These entries update the dashboard totals."
-  );
-  section.id = "recordEntry";
-
-  const form = document.createElement("form");
-  form.className = "nx-form";
-
-  addSelect(form, "Entry type", "type", [
-    ["income", "Income / Sale"],
-    ["expense", "Expense"]
-  ]);
-
-  addInput(form, "Description", "description");
-  addInput(form, "Amount", "amount", "number");
-  addInput(form, "Date", "date", "date");
-
-  const button = addButton(form, "Save Entry");
-
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (!currentUser) return;
-
-    button.disabled = true;
-    try {
-      const data = new FormData(form);
-      const amount = Number(data.get("amount"));
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        throw new Error("Amount must be greater than zero.");
-      }
-
-      const type = String(data.get("type"));
-      await addDoc(
-        collection(db, "users", currentUser.uid, "transactions"),
-        {
-          type,
-          description: String(data.get("description")).trim(),
-          amount,
-          date: String(data.get("date")),
-          createdAt: serverTimestamp()
-        }
-      );
-
-      form.reset();
-      await loadBusinessData();
-    } catch (error) {
-      alert(friendlyError(error));
-    } finally {
-      button.disabled = false;
+      businessProfile = {
+        ...businessProfile,
+        businessName,
+        profession: String(data.get("profession")),
+        currency: String(data.get("currency"))
+      };
     }
+  );
+
+  area.appendChild(card);
+}
+
+function renderOverview(area) {
+  const tx = cache.transactions;
+  const income = tx.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
+  const expense = tx.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
+  const activeProjects = cache.projects.filter(x => x.status !== "completed").length;
+
+  const stats = document.createElement("div");
+  stats.className = "nx-grid";
+
+  [
+    ["Total income", money(income)],
+    ["Net result", money(income - expense)],
+    ["Expenses", money(expense)],
+    ["Customers", String(cache.customers.length)],
+    ["Active projects", String(activeProjects)],
+    ["Inventory items", String(cache.inventory.length)]
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "nx-stat";
+    item.innerHTML = "";
+    const small = document.createElement("span");
+    small.className = "nx-muted";
+    small.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    item.append(small, strong);
+    stats.appendChild(item);
   });
 
-  section.appendChild(form);
-  $("dashboardHome").appendChild(section);
-}
+  area.appendChild(stats);
 
-function renderCustomerForm() {
-  $("customerEntry")?.remove();
-
-  const section = createSection(
-    "Add customer",
-    "Save a customer to your private business directory."
-  );
-  section.id = "customerEntry";
-
-  const form = document.createElement("form");
-  form.className = "nx-form";
-
-  addInput(form, "Customer name", "name");
-  addInput(form, "Email (optional)", "email", "email", false);
-  addInput(form, "Phone (optional)", "phone", "tel", false);
-  const button = addButton(form, "Save Customer");
-
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    button.disabled = true;
-
-    try {
-      const data = new FormData(form);
-      const name = String(data.get("name")).trim();
-      if (!name) throw new Error("Enter the customer name.");
-
-      await addDoc(
-        collection(db, "users", currentUser.uid, "customers"),
-        {
-          name,
-          email: String(data.get("email") || "").trim(),
-          phone: String(data.get("phone") || "").trim(),
-          createdAt: serverTimestamp()
-        }
-      );
-
-      form.reset();
-      await loadBusinessData();
-    } catch (error) {
-      alert(friendlyError(error));
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  section.appendChild(form);
-  $("dashboardHome").appendChild(section);
-}
-
-function renderRecentRecords() {
-  $("realRecords")?.remove();
-
-  const section = createSection(
-    "Saved financial entries",
-    "Recent entries loaded from your Firebase database."
-  );
-  section.id = "realRecords";
-
-  const income = records
-    .filter(record => record.type === "income")
-    .reduce((sum, record) => sum + record.amount, 0);
-
-  const expense = records
-    .filter(record => record.type === "expense")
-    .reduce((sum, record) => sum + record.amount, 0);
-
-  const stats = document.querySelectorAll(".stats .stat-value");
-  if (stats[0]) stats[0].textContent = money(income);
-  if (stats[1]) stats[1].textContent = money(income - expense);
-  if (stats[2]) stats[2].textContent = "0";
-  if (stats[3]) stats[3].textContent = String(customers.length);
-
-  const note = document.createElement("p");
-  note.className = "nx-note";
-  note.textContent =
-    `Recorded income: ${money(income)} · Recorded expenses: ${money(expense)} · Net result: ${money(income - expense)}`;
-  section.appendChild(note);
-
-  if (!records.length) {
-    const empty = document.createElement("p");
-    empty.className = "nx-note";
-    empty.textContent = "No entries saved yet. Use Quick financial entry above.";
-    section.appendChild(empty);
-  } else {
-    records.slice(0, 20).forEach(record => {
-      const row = document.createElement("div");
-      row.className = "nx-record";
-
-      const description = document.createElement("span");
-      description.textContent =
-        `${record.type === "income" ? "Income" : "Expense"} · ${record.description || "Entry"} · ${record.date || ""}`;
-
-      const amount = document.createElement("strong");
-      amount.className = record.type === "income" ? "nx-positive" : "nx-negative";
-      amount.textContent =
-        `${record.type === "income" ? "+" : "−"}${money(record.amount)}`;
-
-      row.append(description, amount);
-      section.appendChild(row);
-    });
-  }
-
-  const customerNote = document.createElement("p");
-  customerNote.className = "nx-note";
-  customerNote.textContent = `Customer records saved: ${customers.length}`;
-  section.appendChild(customerNote);
-
-  $("dashboardHome").appendChild(section);
-}
-
-async function loadBusinessData() {
-  if (!currentUser) return;
-
-  const [transactionSnap, customerSnap] = await Promise.all([
-    getDocs(collection(db, "users", currentUser.uid, "transactions")),
-    getDocs(collection(db, "users", currentUser.uid, "customers"))
-  ]);
-
-  records = transactionSnap.docs.map(item => {
-    const data = item.data();
-    return {
-      id: item.id,
-      ...data,
-      amount: Number(data.amount) || 0
-    };
-  }).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-
-  customers = customerSnap.docs.map(item => ({
-    id: item.id,
-    ...item.data()
+  const recent = [...tx].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
+  area.appendChild(makeListCard("Recent transactions", "Actual records from your account.", recent, item => {
+    return makeRow(
+      item.description,
+      `${item.type} · ${item.date || ""}`,
+      `${item.type === "expense" ? "−" : "+"}${money(item.amount)}`
+    );
   }));
 
-  if (businessProfile?.businessName) {
-    renderRecentRecords();
+  const business = makeCard("Your business", "Your private workspace");
+  const name = document.createElement("p");
+  name.textContent = businessProfile.businessName || "Business profile not set up yet.";
+  const details = document.createElement("p");
+  details.className = "nx-muted";
+  details.textContent = `${businessProfile.profession || "Choose your profession"} · ${businessProfile.currency || "PKR"}`;
+  const edit = document.createElement("button");
+  edit.className = "nx-btn";
+  edit.textContent = "Set up / Edit business";
+  edit.addEventListener("click", () => renderPage("settings"));
+  business.append(name, details, edit);
+  area.appendChild(business);
+}
+
+function renderTransactions(area) {
+  area.appendChild(makeFormCard(
+    "Add transaction",
+    "Record income or expenses. Dashboard totals are calculated from these entries.",
+    form => {
+      addSelect(form, "Type", "type", [["income", "Income / Sale"], ["expense", "Expense"]]);
+      addField(form, "Description", "description");
+      addField(form, "Amount", "amount", "number");
+      addField(form, "Date", "date", "date");
+    },
+    async data => {
+      const amount = Number(data.get("amount"));
+      const description = String(data.get("description") || "").trim();
+      if (!description) throw new Error("Enter a description.");
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error("Amount must be greater than zero.");
+
+      await addDoc(userCollection("transactions"), {
+        type: String(data.get("type")),
+        description,
+        amount,
+        date: String(data.get("date")),
+        createdAt: serverTimestamp()
+      });
+    }
+  ));
+
+  const items = [...cache.transactions].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  area.appendChild(makeListCard("All transactions", "Income and expenses saved to Firebase.", items, item => {
+    const row = makeRow(
+      item.description,
+      `${item.type} · ${item.date || ""}`,
+      `${item.type === "expense" ? "−" : "+"}${money(item.amount)}`
+    );
+    return addDeleteButton(row, "transactions", item.id);
+  }));
+}
+
+function renderCustomers(area) {
+  area.appendChild(makeFormCard(
+    "Add customer",
+    "Build your customer directory.",
+    form => {
+      addField(form, "Customer name", "name");
+      addField(form, "Email", "email", "email", false);
+      addField(form, "Phone", "phone", "tel", false);
+      addField(form, "Notes", "notes", "text", false);
+    },
+    async data => {
+      const name = String(data.get("name") || "").trim();
+      if (!name) throw new Error("Enter a customer name.");
+
+      await addDoc(userCollection("customers"), {
+        name,
+        email: String(data.get("email") || "").trim(),
+        phone: String(data.get("phone") || "").trim(),
+        notes: String(data.get("notes") || "").trim(),
+        createdAt: serverTimestamp()
+      });
+    }
+  ));
+
+  area.appendChild(makeListCard("Customer directory", "Saved customers.", cache.customers, item => {
+    const detail = [item.email, item.phone, item.notes].filter(Boolean).join(" · ");
+    return addDeleteButton(makeRow(item.name, detail), "customers", item.id);
+  }));
+}
+
+function renderProjects(area) {
+  area.appendChild(makeFormCard(
+    "Create project",
+    "Track work, clients and project status.",
+    form => {
+      addField(form, "Project name", "name");
+      addField(form, "Client / customer", "client", "text", false);
+      addField(form, "Due date", "dueDate", "date", false);
+      addSelect(form, "Status", "status", [
+        ["planned", "Planned"],
+        ["in_progress", "In progress"],
+        ["on_hold", "On hold"],
+        ["completed", "Completed"]
+      ]);
+    },
+    async data => {
+      const name = String(data.get("name") || "").trim();
+      if (!name) throw new Error("Enter a project name.");
+
+      await addDoc(userCollection("projects"), {
+        name,
+        client: String(data.get("client") || "").trim(),
+        dueDate: String(data.get("dueDate") || ""),
+        status: String(data.get("status")),
+        createdAt: serverTimestamp()
+      });
+    }
+  ));
+
+  area.appendChild(makeListCard("Projects", "Your saved project list.", cache.projects, item => {
+    const row = makeRow(item.name, `${item.client || "No client"} · Due ${item.dueDate || "not set"} · ${item.status}`);
+    const actions = document.createElement("div");
+    actions.className = "nx-actions";
+
+    const status = document.createElement("button");
+    status.className = "nx-btn";
+    status.textContent = "Mark completed";
+    status.disabled = item.status === "completed";
+    status.addEventListener("click", async () => {
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid, "projects", item.id), {
+          status: "completed",
+          updatedAt: serverTimestamp()
+        });
+        await loadAll();
+      } catch (error) {
+        alert(errorText(error));
+      }
+    });
+
+    actions.appendChild(status);
+    row.appendChild(actions);
+    return addDeleteButton(row, "projects", item.id);
+  }));
+}
+
+function renderInventory(area) {
+  area.appendChild(makeFormCard(
+    "Add inventory item",
+    "Track stock quantities and unit prices.",
+    form => {
+      addField(form, "Item name", "name");
+      addField(form, "SKU / code", "sku", "text", false);
+      addField(form, "Quantity", "quantity", "number");
+      addField(form, "Unit cost", "unitCost", "number");
+      addField(form, "Low-stock alert level", "minStock", "number");
+    },
+    async data => {
+      const name = String(data.get("name") || "").trim();
+      const quantity = Number(data.get("quantity"));
+      const unitCost = Number(data.get("unitCost") || 0);
+      const minStock = Number(data.get("minStock") || 0);
+
+      if (!name) throw new Error("Enter an item name.");
+      if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Enter a valid quantity.");
+      if (unitCost < 0 || minStock < 0) throw new Error("Values cannot be negative.");
+
+      await addDoc(userCollection("inventory"), {
+        name,
+        sku: String(data.get("sku") || "").trim(),
+        quantity,
+        unitCost,
+        minStock,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+  ));
+
+  area.appendChild(makeListCard("Inventory", "Low-stock items are marked automatically.", cache.inventory, item => {
+    const low = Number(item.quantity || 0) <= Number(item.minStock || 0);
+    const row = makeRow(
+      item.name,
+      `${item.sku || "No SKU"} · Qty: ${item.quantity} · Unit cost: ${money(item.unitCost)}`,
+      low ? "LOW STOCK" : "IN STOCK"
+    );
+    if (low) row.classList.add("nx-bad");
+
+    const actions = document.createElement("div");
+    actions.className = "nx-actions";
+
+    const adjust = document.createElement("button");
+    adjust.className = "nx-btn";
+    adjust.textContent = "Adjust quantity";
+    adjust.addEventListener("click", async () => {
+      const raw = prompt("Enter the new stock quantity:", String(item.quantity));
+      if (raw === null) return;
+      const quantity = Number(raw);
+      if (!Number.isFinite(quantity) || quantity < 0) {
+        alert("Enter a valid non-negative quantity.");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid, "inventory", item.id), {
+          quantity,
+          updatedAt: serverTimestamp()
+        });
+        await loadAll();
+      } catch (error) {
+        alert(errorText(error));
+      }
+    });
+
+    actions.appendChild(adjust);
+    row.appendChild(actions);
+    return addDeleteButton(row, "inventory", item.id);
+  }));
+}
+
+function downloadCSV() {
+  const rows = [
+    ["Type", "Description", "Date", "Amount"],
+    ...cache.transactions.map(item => [
+      item.type,
+      item.description || "",
+      item.date || "",
+      Number(item.amount || 0)
+    ])
+  ];
+
+  const csv = rows.map(row =>
+    row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")
+  ).join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "nexora-transactions.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderReports(area) {
+  const tx = cache.transactions;
+  const income = tx.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
+  const expense = tx.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
+
+  const summary = makeCard("Financial report", "Calculated from saved transaction records.");
+  const grid = document.createElement("div");
+  grid.className = "nx-grid";
+
+  [["Income", money(income)], ["Expenses", money(expense)], ["Net result", money(income - expense)]].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "nx-stat";
+    const small = document.createElement("span");
+    small.className = "nx-muted";
+    small.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    item.append(small, strong);
+    grid.appendChild(item);
+  });
+
+  summary.appendChild(grid);
+
+  const button = document.createElement("button");
+  button.className = "nx-primary";
+  button.style.marginTop = "16px";
+  button.textContent = "Export transactions as CSV";
+  button.addEventListener("click", downloadCSV);
+  summary.appendChild(button);
+  area.appendChild(summary);
+
+  area.appendChild(makeListCard("Transaction details", "All current financial records.", tx, item =>
+    makeRow(item.description, `${item.type} · ${item.date || ""}`, money(item.amount))
+  ));
+}
+
+function renderSettings(area) {
+  businessSetupPage();
+}
+
+function renderPage(page) {
+  activePage = page;
+  addAppStyles();
+
+  const titles = {
+    dashboard: "Workspace overview",
+    transactions: "Transactions",
+    customers: "Customers",
+    projects: "Projects",
+    inventory: "Inventory",
+    reports: "Reports",
+    settings: "Business settings"
+  };
+
+  $("dashboardHome").hidden = false;
+  $("moduleNotice").hidden = true;
+  $("pageTitle") && ($("pageTitle").textContent = titles[page] || "Workspace");
+  document.querySelectorAll(".nav-link").forEach(button => {
+    button.classList.toggle("active", button.dataset.page === page);
+  });
+
+  const home = $("dashboardHome");
+  const welcome = home.querySelector(".welcome");
+  const stats = home.querySelector(".stats");
+  const oldGrids = home.querySelectorAll(".dashboard-grid,.bottom-grid");
+
+  oldGrids.forEach(element => element.remove());
+
+  let area = $("dynamicWorkspace");
+  if (!area) {
+    area = document.createElement("div");
+    area.id = "dynamicWorkspace";
+    area.className = "nx-area";
+    home.appendChild(area);
   }
+  area.replaceChildren();
+
+  if (welcome) welcome.hidden = page !== "dashboard";
+  if (stats) stats.hidden = page !== "dashboard";
+
+  if (page === "dashboard") renderOverview(area);
+  if (page === "transactions") renderTransactions(area);
+  if (page === "customers") renderCustomers(area);
+  if (page === "projects") renderProjects(area);
+  if (page === "inventory") renderInventory(area);
+  if (page === "reports") renderReports(area);
+  if (page === "settings") renderSettings(area);
 }
 
 async function loadAccount(user) {
   currentUser = user;
-  showDashboard(user);
+  authScreen.hidden = true;
+  dashboard.hidden = false;
 
+  const name = user.displayName || user.email?.split("@")[0] || "User";
+  $("welcomeName").textContent = name;
+  $("welcomeNameInline").textContent = name;
+  $("userEmail").textContent = user.email || "";
+  $("avatar").textContent = name.charAt(0).toUpperCase();
+  $("versionLabel").textContent = `NEXORA v${VERSION} · Business workspace`;
+
+  await saveProfile(user);
   const profileSnap = await getDoc(doc(db, "users", user.uid));
   businessProfile = profileSnap.exists() ? profileSnap.data() : {};
 
-  renderWorkspace();
-  await loadBusinessData();
-}
+  await loadAll();
 
-$("backToDashboard").addEventListener("click", () => {
-  $("moduleNotice").hidden = true;
-  $("dashboardHome").hidden = false;
-  document.querySelectorAll(".nav-link").forEach(link => {
-    link.classList.toggle("active", link.dataset.page === "dashboard");
-  });
-});
+  if (!businessProfile.businessName) renderPage("settings");
+}
 
 document.querySelectorAll(".nav-link").forEach(button => {
   button.addEventListener("click", () => {
-    if (button.dataset.page === "dashboard") {
-      $("dashboardHome").hidden = false;
-      $("moduleNotice").hidden = true;
-      return;
-    }
-
-    $("dashboardHome").hidden = true;
-    $("moduleNotice").hidden = false;
-    $("moduleTitle").textContent = button.dataset.title;
+    renderPage(button.dataset.page || "dashboard");
   });
 });
+
+$("backToDashboard")?.addEventListener("click", () => renderPage("dashboard"));
 
 onAuthStateChanged(auth, async user => {
   if (!user) {
     currentUser = null;
-    businessProfile = null;
-    records = [];
-    customers = [];
-    showLogin();
+    businessProfile = {};
+    cache = { transactions: [], customers: [], projects: [], inventory: [] };
+    dashboard.hidden = true;
+    authScreen.hidden = false;
     return;
   }
 
   try {
-    await saveUserProfile(user);
     await loadAccount(user);
   } catch (error) {
-    console.error("NEXORA account loading error:", error);
-    showLogin();
-    message(
-      "Could not load your workspace. Check Firestore rules and your internet connection."
-    );
+    console.error("NEXORA load error:", error);
+    dashboard.hidden = true;
+    authScreen.hidden = false;
+    showMessage(`Could not load workspace. ${errorText(error)}`);
   }
 });
 
-setMode("login");
+setAuthMode("login");

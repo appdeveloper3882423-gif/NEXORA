@@ -3,705 +3,397 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#080b16">
-  <title>NEXORA — Business Intelligence</title>
+  <title>NEXORA — Business Workspace</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #080b16;
-      --panel: #101629;
-      --panel2: #141c32;
-      --border: #25314d;
-      --text: #edf2ff;
-      --muted: #8998b8;
-      --blue: #5794ff;
-      --purple: #a47aff;
-      --cyan: #45d6e8;
-      --green: #43dfad;
-      --red: #ff6e91;
+      --bg:#080b16;
+      --panel:#101629;
+      --panel2:#141d32;
+      --line:#26324b;
+      --text:#f4f6ff;
+      --muted:#9ba8c4;
+      --blue:#5794ff;
+      --purple:#8e78ff;
+      --cyan:#45d6e8;
+      --green:#5de0ad;
     }
-
-    * { box-sizing: border-box; }
-
+    * { box-sizing:border-box; }
     body {
-      margin: 0;
-      background:
-        radial-gradient(ellipse at 75% 0%, #20204a55, transparent 35%),
-        var(--bg);
-      color: var(--text);
-      font: 14px/1.5 Inter, system-ui, -apple-system, sans-serif;
+      margin:0; min-height:100vh;
+      background:radial-gradient(ellipse at 80% 0%,#172044 0,transparent 45%),var(--bg);
+      color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;
     }
-
-    button, select, input { font: inherit; }
-    button { cursor: pointer; }
-    button:focus-visible, select:focus-visible {
-      outline: 2px solid var(--cyan);
-      outline-offset: 3px;
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    [hidden] { display:none!important; }
+    .muted { color:var(--muted); }
+    .auth-wrap {
+      min-height:100vh;display:grid;place-items:center;padding:24px;
     }
-
-    .app {
-      display: grid;
-      grid-template-columns: 238px minmax(0, 1fr);
-      min-height: 100vh;
+    .auth-card {
+      width:100%;max-width:440px;padding:32px;
+      background:rgba(16,22,41,.94);border:1px solid var(--line);
+      border-radius:22px;box-shadow:0 24px 90px #0008;
     }
-
-    .sidebar {
-      background: #0b1020ed;
-      border-right: 1px solid var(--border);
-      padding: 24px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 28px;
+    .brand { display:flex;align-items:center;gap:12px;margin-bottom:30px; }
+    .brand-mark {
+      width:46px;height:46px;border-radius:15px;display:grid;place-items:center;
+      font-size:24px;font-weight:900;
+      background:linear-gradient(135deg,var(--blue),var(--purple));
+      box-shadow:0 0 30px #7168ff40;
     }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      padding: 0 7px;
+    .brand-name { font-size:23px;letter-spacing:2px;font-weight:850; }
+    h1 { font-size:27px;margin:0 0 9px; }
+    .subtitle { color:var(--muted);line-height:1.6;margin:0 0 25px; }
+    .field { display:block;margin:17px 0; }
+    .field span { display:block;font-size:13px;color:#c3cce0;margin-bottom:8px; }
+    input {
+      width:100%;border:1px solid #2c3854;border-radius:11px;
+      padding:13px 14px;background:#0a1020;color:var(--text);outline:none;
     }
-
-    .logo {
-      width: 43px;
-      height: 43px;
-      display: grid;
-      place-items: center;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #42d7ff, #6874ff 55%, #b06aff);
-      color: #fff;
-      font-weight: 900;
-      font-size: 24px;
-      box-shadow: 0 0 28px #607cff35;
+    input:focus { border-color:var(--blue);box-shadow:0 0 0 3px #5794ff20; }
+    .primary,.google,.text-button {
+      width:100%;border-radius:11px;padding:13px 15px;font-weight:700;
     }
-
-    .brand-name { font-size: 19px; font-weight: 850; letter-spacing: 1.5px; }
-    .brand-sub { color: var(--muted); font-size: 10px; letter-spacing: 1.5px; }
-
-    .nav-group-title {
-      color: #637394;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 1.7px;
-      padding: 0 11px;
-      margin: 0 0 8px;
+    .primary {
+      border:0;color:white;background:linear-gradient(110deg,#397ff5,#8b6aff);
+      box-shadow:0 8px 24px #655bff30;
     }
-
-    .nav { display: grid; gap: 5px; }
-    .nav button {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      width: 100%;
-      border: 1px solid transparent;
-      border-radius: 10px;
-      padding: 11px 12px;
-      color: #9baac6;
-      background: transparent;
-      text-align: left;
-      transition: .2s ease;
+    .primary:disabled,.google:disabled { opacity:.6;cursor:wait; }
+    .google {
+      display:flex;align-items:center;justify-content:center;gap:11px;
+      color:#1f2937;background:#fff;border:1px solid #e5e7eb;margin-bottom:18px;
     }
-
-    .nav button:hover { background: #19233a; color: white; }
-    .nav button.active {
-      background: linear-gradient(100deg, #4d6fff35, #a56aff13);
-      border-color: #687dff5c;
-      color: #fff;
-      box-shadow: inset 3px 0 #8d8bff;
+    .google-g { font-size:21px;font-weight:900;color:#4285f4; }
+    .separator { display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px;margin:19px 0; }
+    .separator:before,.separator:after { content:"";height:1px;background:var(--line);flex:1; }
+    .text-button { border:0;background:transparent;color:#a9b5ff;margin-top:9px; }
+    .text-button:hover { color:#fff; }
+    .forgot { display:block;text-align:right;font-size:13px;color:#a9b5ff;margin:0 0 17px; }
+    .message { padding:11px 13px;border-radius:10px;font-size:13px;line-height:1.5;margin-bottom:16px;overflow-wrap:anywhere; }
+    .message.error { background:#7f1d2d35;color:#ffb4c0;border:1px solid #a13d55; }
+    .message.success { background:#145c4930;color:#7af0c1;border:1px solid #267a61; }
+    .tiny { text-align:center;color:var(--muted);font-size:12px;line-height:1.6;margin-top:22px; }
+    .app { min-height:100vh;display:grid;grid-template-columns:238px 1fr; }
+    aside { background:#0b1020eF;border-right:1px solid var(--line);padding:22px 15px; }
+    aside .brand { padding:0 7px;margin-bottom:35px; }
+    aside .brand-mark { width:39px;height:39px;border-radius:12px;font-size:20px; }
+    aside .brand-name { font-size:18px; }
+    .nav-label { color:#687795;font-size:10px;letter-spacing:1.8px;padding:0 12px;margin:20px 0 10px; }
+    .nav-link {
+      width:100%;display:flex;align-items:center;gap:12px;padding:12px;
+      border:1px solid transparent;border-radius:10px;color:#aab6d0;
+      background:transparent;text-align:left;margin:4px 0;
     }
-
-    .nav-icon { width: 20px; text-align: center; font-size: 17px; }
-    .nav-label { flex: 1; }
-    .nav-tag {
-      font-size: 9px;
-      color: #a99bff;
-      background: #7766ff20;
-      padding: 2px 5px;
-      border-radius: 4px;
+    .nav-link:hover,.nav-link.active {
+      color:white;background:linear-gradient(100deg,#4b74ff28,#8d78ff16);
+      border-color:#5368a64a;
     }
-
-    .sidebar-bottom { margin-top: auto; }
-    .upgrade {
-      padding: 16px;
-      border: 1px solid #6557bd70;
-      border-radius: 15px;
-      background: linear-gradient(145deg, #29204b80, #101a31);
+    .nav-icon { width:22px;text-align:center; }
+    .side-bottom { margin-top:35px;padding:14px;border:1px solid var(--line);border-radius:13px;background:#111a30; }
+    .side-bottom strong { display:block;font-size:13px;margin-bottom:7px; }
+    .side-bottom p { color:var(--muted);font-size:12px;line-height:1.5;margin:0; }
+    main { min-width:0;padding:28px clamp(16px,3vw,40px); }
+    .topbar { display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:30px; }
+    .eyebrow { color:var(--cyan);font-size:11px;letter-spacing:2px;font-weight:800; }
+    .page-title { font-size:28px;margin:7px 0;letter-spacing:-.7px; }
+    .top-actions { display:flex;align-items:center;gap:12px; }
+    .user-chip { display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);padding:8px 12px;border-radius:12px;max-width:250px; }
+    .avatar { flex-shrink:0;width:35px;height:35px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue),var(--purple));font-weight:800; }
+    .user-info { min-width:0; }
+    .user-info strong,.user-info small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px; }
+    .user-info small { color:var(--muted);font-size:11px;margin-top:3px; }
+    .logout { border:1px solid #3a4660;background:#151e32;color:#dce4ff;border-radius:10px;padding:11px 13px; }
+    .welcome { display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:22px; }
+    .welcome h2 { margin:0 0 7px;font-size:20px; }
+    .welcome p { margin:0;color:var(--muted);font-size:13px; }
+    .status { color:var(--green);font-size:12px;border:1px solid #2c7963;background:#123c333b;border-radius:20px;padding:8px 12px;white-space:nowrap; }
+    .stats { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin-bottom:18px; }
+    .card { min-width:0;background:linear-gradient(145deg,#131c31,#0f1526);border:1px solid var(--line);border-radius:16px;padding:19px; }
+    .stat-top { display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--muted);font-size:12px; }
+    .stat-icon { display:grid;place-items:center;width:35px;height:35px;border-radius:11px;background:#5b8cff20;color:#8bb2ff;font-size:18px; }
+    .stat-value { font-size:27px;font-weight:800;margin:17px 0 7px;letter-spacing:-.7px; }
+    .stat-note { font-size:11px;color:var(--muted); }
+    .accent { color:var(--cyan); }
+    .dashboard-grid { display:grid;grid-template-columns:minmax(0,1.65fr) minmax(230px,1fr);gap:17px; }
+    .card-heading { display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px; }
+    .card-heading h3 { font-size:15px;margin:0 0 5px; }
+    .card-heading p { margin:0;color:var(--muted);font-size:11px; }
+    .pill { font-size:11px;color:#b7c8ff;background:#26375d80;border:1px solid #354c7a;padding:7px 9px;border-radius:9px; }
+    .chart { width:100%;height:auto;display:block;overflow:visible; }
+    .chart text { fill:#8492b1;font-size:10px; }
+    .chart .gridline { stroke:#27334b;stroke-width:1; }
+    .legend { display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin-top:15px; }
+    .dot { display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px; }
+    .source-layout { display:grid;grid-template-columns:140px 1fr;align-items:center;gap:12px; }
+    .donut { width:140px;max-width:100%; }
+    .source-list { display:grid;gap:15px; }
+    .source-item { display:flex;justify-content:space-between;gap:10px;font-size:12px; }
+    .source-item span { color:var(--muted); }
+    .empty { text-align:center;padding:32px 10px;color:var(--muted); }
+    .empty-icon { font-size:31px;margin-bottom:12px; }
+    .bottom-grid { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(240px,1fr);gap:17px;margin-top:17px; }
+    .table-wrap { overflow:auto; }
+    table { border-collapse:collapse;width:100%;min-width:390px;font-size:12px; }
+    th { color:#8290ad;font-weight:600;text-align:left;font-size:10px;letter-spacing:.5px; }
+    th,td { padding:13px 8px;border-bottom:1px solid #253049; }
+    td { color:#dce4f8; }
+    .table-empty { text-align:center;padding:24px 8px;color:var(--muted); }
+    .activity { display:flex;gap:11px;margin:17px 0;align-items:flex-start; }
+    .activity-icon { width:32px;height:32px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;background:#24375b;color:#8db2ff; }
+    .activity strong { display:block;font-size:12px;margin:2px 0 5px; }
+    .activity small { color:var(--muted);font-size:11px;line-height:1.5; }
+    .module-card { padding:28px; }
+    .module-card h2 { margin-top:0; }
+    .module-card p { color:var(--muted);line-height:1.7; }
+    footer { text-align:center;color:#677593;font-size:11px;margin:25px 0 5px; }
+    @media(max-width:1050px) {
+      .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .dashboard-grid,.bottom-grid { grid-template-columns:1fr; }
     }
-
-    .upgrade-icon { font-size: 25px; }
-    .upgrade h3 { margin: 8px 0 4px; font-size: 14px; }
-    .upgrade p { color: var(--muted); font-size: 11px; margin: 0 0 13px; }
-
-    .primary-btn {
-      border: 0;
-      border-radius: 9px;
-      padding: 10px 13px;
-      color: white;
-      background: linear-gradient(100deg, #567bff, #9a64ee);
-      font-weight: 750;
-      box-shadow: 0 5px 22px #745eff26;
+    @media(max-width:720px) {
+      .app { grid-template-columns:1fr; }
+      aside { border-right:0;border-bottom:1px solid var(--line);padding:12px; }
+      aside .brand { margin:0 0 12px; }
+      .nav-label,.side-bottom { display:none; }
+      nav { display:flex;overflow-x:auto;gap:5px; }
+      .nav-link { width:auto;flex-shrink:0;padding:10px;font-size:12px; }
+      main { padding:20px 14px; }
+      .topbar { align-items:flex-start;flex-wrap:wrap;margin-bottom:24px; }
+      .page-title { font-size:23px; }
+      .top-actions { width:100%;justify-content:space-between; }
+      .user-chip { flex:1;min-width:0; }
+      .welcome { align-items:flex-start; }
+      .source-layout { grid-template-columns:125px 1fr; }
+      .donut { width:125px; }
+      .auth-card { padding:24px; }
     }
-
-    .upgrade .primary-btn { width: 100%; font-size: 12px; }
-
-    main { min-width: 0; padding: 24px clamp(16px, 3vw, 36px) 36px; }
-
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 30px;
-    }
-
-    .mobile-brand { display: none; }
-    .search {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      max-width: 340px;
-      width: 100%;
-      padding: 11px 14px;
-      border: 1px solid var(--border);
-      background: #11182a;
-      border-radius: 11px;
-      color: var(--muted);
-    }
-
-    .search input {
-      min-width: 0;
-      width: 100%;
-      background: transparent;
-      color: var(--text);
-      border: 0;
-      outline: none;
-    }
-
-    .top-actions { display: flex; align-items: center; gap: 10px; }
-    .icon-btn {
-      width: 40px;
-      height: 40px;
-      display: grid;
-      place-items: center;
-      border: 1px solid var(--border);
-      border-radius: 11px;
-      color: #c7d5ef;
-      background: #121a2d;
-    }
-
-    .avatar {
-      width: 35px;
-      height: 35px;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #50cfff, #9867ff);
-      color: white;
-      font-weight: 800;
-    }
-
-    .profile { display: flex; align-items: center; gap: 9px; }
-    .profile small { display: block; color: var(--muted); font-size: 10px; }
-
-    .eyebrow {
-      color: #8f9fbe;
-      font-size: 11px;
-      letter-spacing: 1.8px;
-      text-transform: uppercase;
-    }
-
-    .page-heading {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      flex-wrap: wrap;
-      gap: 18px;
-      margin-bottom: 24px;
-    }
-
-    h1 { margin: 5px 0; font-size: clamp(25px, 3vw, 34px); letter-spacing: -1px; }
-    .subtitle { color: var(--muted); margin: 0; font-size: 13px; }
-
-    .heading-actions { display: flex; gap: 9px; flex-wrap: wrap; }
-    .select, .secondary-btn {
-      border: 1px solid var(--border);
-      background: #11182a;
-      color: #d9e5ff;
-      border-radius: 9px;
-      padding: 10px 12px;
-    }
-
-    .section-label {
-      margin: 27px 0 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .section-label h2 { margin: 0; font-size: 15px; font-weight: 750; }
-    .section-label span { color: var(--muted); font-size: 11px; }
-
-    .grid { display: grid; gap: 15px; }
-    .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-    .card {
-      min-width: 0;
-      border: 1px solid var(--border);
-      border-radius: 15px;
-      padding: 17px;
-      background: linear-gradient(145deg, #131b30, #0e1424);
-      box-shadow: 0 8px 30px #00000012;
-    }
-
-    .stat-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-    .stat-title { color: #9baac7; font-size: 12px; }
-    .stat-icon {
-      width: 34px;
-      height: 34px;
-      display: grid;
-      place-items: center;
-      border-radius: 10px;
-      background: #588aff19;
-      color: #76a5ff;
-      font-size: 17px;
-    }
-
-    .stat-value { font-size: clamp(22px, 2.2vw, 29px); font-weight: 800; letter-spacing: -.7px; margin: 14px 0 6px; }
-    .stat-foot { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
-    .positive { color: var(--green); }
-    .negative { color: var(--red); }
-
-    .analytics { grid-template-columns: minmax(0, 1.65fr) minmax(260px, 1fr); }
-    .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-    .card-heading h2 { margin: 0; font-size: 14px; }
-    .card-heading p { color: var(--muted); margin: 5px 0 0; font-size: 11px; }
-    .big-number { margin-top: 16px; font-size: 27px; font-weight: 800; }
-    .chart-wrap { height: 220px; width: 100%; margin-top: 16px; }
-    .chart-wrap svg { width: 100%; height: 100%; overflow: visible; }
-    .chart-grid { stroke: #27324b; stroke-dasharray: 4 5; stroke-width: 1; }
-    .chart-line {
-      fill: none; stroke: #68a2ff; stroke-width: 3;
-      stroke-linecap: round; stroke-linejoin: round;
-      filter: drop-shadow(0 0 5px #638bff72);
-    }
-
-    .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 11px; margin-top: 12px; }
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
-
-    .donut-area { display: flex; align-items: center; justify-content: center; gap: 18px; min-height: 220px; flex-wrap: wrap; }
-    .donut {
-      width: 155px;
-      height: 155px;
-      border-radius: 50%;
-      background: conic-gradient(#8c72ff 0 38%, #42c8ec 38% 67%, #4d83ff 67% 85%, #e68bd4 85% 100%);
-      display: grid;
-      place-items: center;
-      position: relative;
-      flex-shrink: 0;
-      box-shadow: 0 0 30px #6e5eff12;
-    }
-
-    .donut::before { content: ""; position: absolute; inset: 20px; border-radius: 50%; background: #11182a; }
-    .donut-center { position: relative; text-align: center; }
-    .donut-center strong { display: block; font-size: 22px; }
-    .donut-center span { font-size: 10px; color: var(--muted); }
-    .legend-list { display: grid; gap: 12px; }
-    .legend-row { display: flex; align-items: center; gap: 8px; color: #c2cce1; font-size: 11px; }
-    .legend-row strong { margin-left: auto; }
-
-    .lower-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); }
-    .table-scroll { overflow-x: auto; margin-top: 15px; }
-    table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 12px; }
-    th { color: #8292b0; text-align: left; font-weight: 600; padding: 12px 10px; }
-    td { border-top: 1px solid #222d43; padding: 13px 10px; color: #d6e0f5; }
-    .status { padding: 4px 8px; border-radius: 20px; font-size: 10px; }
-    .status.paid { color: var(--green); background: #43dfad15; }
-    .status.pending { color: #ffd17c; background: #ffd17c15; }
-    .status.review { color: #9eb8ff; background: #779bff18; }
-
-    .activity-list { display: grid; gap: 0; margin-top: 10px; }
-    .activity { display: flex; align-items: flex-start; gap: 11px; padding: 13px 0; border-bottom: 1px solid #222d43; }
-    .activity:last-child { border-bottom: 0; }
-    .activity-symbol { width: 33px; height: 33px; display: grid; place-items: center; border-radius: 10px; background: #607fff19; }
-    .activity-content { flex: 1; }
-    .activity-content strong { display: block; font-size: 12px; font-weight: 650; }
-    .activity-content span { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
-    .activity time { font-size: 10px; color: #7283a2; white-space: nowrap; }
-
-    .insight {
-      margin-top: 18px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 15px;
-      border: 1px solid #6d6bff55;
-      border-radius: 13px;
-      background: linear-gradient(100deg, #685bff19, #36c7ed0b);
-    }
-
-    .insight-icon { font-size: 22px; }
-    .insight strong { display: block; font-size: 12px; }
-    .insight p { margin: 3px 0 0; font-size: 11px; color: var(--muted); }
-    .footer { margin-top: 28px; text-align: center; font-size: 10px; color: #647492; }
-
-    .toast {
-      position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 20px);
-      background: #1b2942; border: 1px solid #42567c; color: white;
-      border-radius: 10px; padding: 12px 18px; opacity: 0; pointer-events: none;
-      transition: .2s; z-index: 10; max-width: 90vw; text-align: center;
-    }
-    .toast.show { opacity: 1; transform: translate(-50%, 0); }
-
-    @media (max-width: 1100px) {
-      .app { grid-template-columns: 205px minmax(0, 1fr); }
-      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .analytics, .lower-grid { grid-template-columns: minmax(0, 1fr); }
-    }
-
-    @media (max-width: 700px) {
-      .app { display: block; }
-      .sidebar {
-        display: none;
-        position: fixed;
-        z-index: 20;
-        inset: 0 auto 0 0;
-        width: min(285px, 86vw);
-        box-shadow: 20px 0 70px #0009;
-        overflow-y: auto;
-      }
-      .sidebar.open { display: flex; }
-      main { padding: 17px 14px 28px; }
-      .topbar { margin-bottom: 23px; }
-      .mobile-brand { display: flex; align-items: center; gap: 8px; }
-      .mobile-brand .logo { width: 35px; height: 35px; font-size: 19px; }
-      .mobile-brand .brand-name { font-size: 15px; }
-      .search { display: none; }
-      .profile-copy { display: none; }
-      .page-heading { align-items: flex-start; }
-      .stats { gap: 10px; }
-      .card { padding: 14px; }
-      .stat-value { font-size: 23px; }
-      .chart-wrap { height: 190px; }
-      .donut-area { gap: 20px; }
-      .section-label { margin-top: 22px; }
-    }
-
-    @media (max-width: 380px) {
-      .stats { grid-template-columns: 1fr; }
-      .heading-actions { width: 100%; }
-      .heading-actions > * { flex: 1; }
+    @media(max-width:390px) {
+      .stats { gap:9px; }
+      .card { padding:14px; }
+      .stat-value { font-size:22px; }
+      .source-layout { grid-template-columns:1fr;justify-items:center; }
+      .source-list { width:100%; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar" id="sidebar">
+  <section id="authScreen" class="auth-wrap">
+    <div class="auth-card">
       <div class="brand">
-        <div class="logo">N</div>
+        <div class="brand-mark">N</div>
         <div>
           <div class="brand-name">NEXORA</div>
-          <div class="brand-sub">BUSINESS INTELLIGENCE</div>
+          <div class="muted" style="font-size:11px;margin-top:4px">One Platform. Every Profession.</div>
         </div>
       </div>
 
-      <div>
-        <div class="nav-group-title">WORKSPACE</div>
-        <nav class="nav" id="navigation">
-          <button class="active" data-page="Dashboard"><span class="nav-icon">▦</span><span class="nav-label">Dashboard</span></button>
-          <button data-page="Analytics"><span class="nav-icon">⌁</span><span class="nav-label">Analytics</span></button>
-          <button data-page="Transactions"><span class="nav-icon">⇄</span><span class="nav-label">Transactions</span></button>
-          <button data-page="Customers"><span class="nav-icon">♧</span><span class="nav-label">Customers</span></button>
-          <button data-page="Projects"><span class="nav-icon">◇</span><span class="nav-label">Projects</span></button>
-        </nav>
+      <h1 id="authTitle">Welcome back</h1>
+      <p id="authSubtitle" class="subtitle">Sign in to continue to your workspace.</p>
+
+      <div id="authMessage" class="message error" role="status" aria-live="polite" hidden></div>
+
+      <button id="googleButton" class="google" type="button">
+        <span class="google-g">G</span> Continue with Google
+      </button>
+
+      <div class="separator">OR CONTINUE WITH EMAIL</div>
+
+      <form id="authForm">
+        <label id="nameField" class="field" hidden>
+          <span>Full name</span>
+          <input id="name" name="name" type="text" placeholder="Your name" minlength="2" autocomplete="name">
+        </label>
+
+        <label class="field">
+          <span>Email address</span>
+          <input id="email" name="email" type="email" placeholder="you@example.com" required autocomplete="email">
+        </label>
+
+        <label class="field">
+          <span>Password</span>
+          <input id="password" name="password" type="password" placeholder="At least 6 characters" required minlength="6" autocomplete="current-password">
+        </label>
+
+        <button id="forgotButton" class="forgot text-button" type="button">Forgot password?</button>
+        <button id="submitButton" class="primary" type="submit">Sign In</button>
+      </form>
+
+      <button id="toggleMode" class="text-button" type="button">New to NEXORA? Create an account</button>
+      <div class="tiny">Secure sign-in powered by Firebase.<br>By continuing, you agree to use NEXORA responsibly.</div>
+    </div>
+  </section>
+
+  <section id="dashboard" class="app" hidden>
+    <aside>
+      <div class="brand">
+        <div class="brand-mark">N</div>
+        <div class="brand-name">NEXORA</div>
       </div>
 
-      <div>
-        <div class="nav-group-title">MANAGEMENT</div>
-        <nav class="nav">
-          <button data-page="Inventory"><span class="nav-icon">▤</span><span class="nav-label">Inventory</span></button>
-          <button data-page="Reports"><span class="nav-icon">▥</span><span class="nav-label">Reports</span></button>
-          <button data-page="Team"><span class="nav-icon">♙</span><span class="nav-label">Team & Access</span></button>
-          <button data-page="Automations"><span class="nav-icon">✧</span><span class="nav-label">Automations</span><span class="nav-tag">PRO</span></button>
-        </nav>
-      </div>
+      <div class="nav-label">WORKSPACE</div>
+      <nav>
+        <button class="nav-link active" data-page="dashboard" data-title="Overview"><span class="nav-icon">◫</span>Overview</button>
+        <button class="nav-link" data-page="transactions" data-title="Transactions"><span class="nav-icon">⇄</span>Transactions</button>
+        <button class="nav-link" data-page="customers" data-title="Customers"><span class="nav-icon">♙</span>Customers</button>
+        <button class="nav-link" data-page="projects" data-title="Projects"><span class="nav-icon">▦</span>Projects</button>
+        <button class="nav-link" data-page="inventory" data-title="Inventory"><span class="nav-icon">▤</span>Inventory</button>
+        <button class="nav-link" data-page="reports" data-title="Reports"><span class="nav-icon">▥</span>Reports</button>
+      </nav>
 
-      <div>
-        <div class="nav-group-title">PREFERENCES</div>
-        <nav class="nav">
-          <button data-page="Workspace"><span class="nav-icon">◈</span><span class="nav-label">My Workspace</span></button>
-          <button data-page="Settings"><span class="nav-icon">⚙</span><span class="nav-label">Settings</span></button>
-          <button data-page="Subscription"><span class="nav-icon">♢</span><span class="nav-label">Subscription</span></button>
-        </nav>
-      </div>
+      <div class="nav-label">PREFERENCES</div>
+      <button class="nav-link" data-page="settings" data-title="Settings"><span class="nav-icon">⚙</span>Settings</button>
 
-      <div class="sidebar-bottom">
-        <div class="upgrade">
-          <div class="upgrade-icon">✦</div>
-          <h3>Unlock your potential</h3>
-          <p>Explore advanced insights and powerful business tools.</p>
-          <button class="primary-btn" data-action="plans">Explore Plans ↗</button>
-        </div>
+      <div class="side-bottom">
+        <strong>✦ Your workspace</strong>
+        <p>Your business tools, insights and workflow in one place.</p>
       </div>
     </aside>
 
     <main>
       <header class="topbar">
-        <div class="mobile-brand">
-          <button class="icon-btn" id="menuButton" aria-label="Open navigation">☰</button>
-          <div class="logo">N</div>
-          <div class="brand-name">NEXORA</div>
+        <div>
+          <div class="eyebrow">BUSINESS INTELLIGENCE</div>
+          <h1 class="page-title">Workspace overview</h1>
+          <div class="muted" style="font-size:12px">Your business, at a glance.</div>
         </div>
-        <label class="search">
-          <span>⌕</span>
-          <input id="searchInput" type="search" placeholder="Search workspace..." aria-label="Search workspace">
-          <span>⌘ K</span>
-        </label>
         <div class="top-actions">
-          <button class="icon-btn" data-action="notifications" aria-label="Notifications">♧</button>
-          <button class="icon-btn" data-action="help" aria-label="Help">?</button>
-          <div class="profile">
-            <div class="avatar">N</div>
-            <div class="profile-copy"><strong>Workspace Owner</strong><small>Free workspace</small></div>
+          <div class="user-chip">
+            <div id="avatar" class="avatar">N</div>
+            <div class="user-info">
+              <strong id="welcomeName">User</strong>
+              <small id="userEmail">Loading account...</small>
+            </div>
           </div>
+          <button id="logoutButton" class="logout" type="button">Sign out ↗</button>
         </div>
       </header>
 
-      <section class="page-heading">
-        <div>
-          <div class="eyebrow">Business overview / 01</div>
-          <h1 id="pageTitle">Dashboard Overview</h1>
-          <p class="subtitle" id="pageSubtitle">Your business at a glance. Make every decision count.</p>
-        </div>
-        <div class="heading-actions">
-          <select class="select" id="dateFilter" aria-label="Report period">
-            <option value="7">Last 7 days</option>
-            <option value="30" selected>Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-          <button class="secondary-btn" id="exportButton">↧ Export</button>
-        </div>
-      </section>
-
-      <div class="eyebrow">Performance snapshot</div>
-      <section class="grid stats" id="statsGrid" style="margin-top:12px">
-        <article class="card">
-          <div class="stat-top"><span class="stat-title">Total Revenue</span><span class="stat-icon">↗</span></div>
-          <div class="stat-value" data-stat="revenue">$128,450</div>
-          <div class="stat-foot"><span class="positive">↗ 12.8%</span><span>vs previous period</span></div>
-        </article>
-        <article class="card">
-          <div class="stat-top"><span class="stat-title">Net Profit</span><span class="stat-icon">◈</span></div>
-          <div class="stat-value" data-stat="profit">$32,680</div>
-          <div class="stat-foot"><span class="positive">↗ 8.4%</span><span>vs previous period</span></div>
-        </article>
-        <article class="card">
-          <div class="stat-top"><span class="stat-title">Total Expenses</span><span class="stat-icon">⇩</span></div>
-          <div class="stat-value" data-stat="expenses">$21,940</div>
-          <div class="stat-foot"><span class="negative">↗ 3.2%</span><span>vs previous period</span></div>
-        </article>
-        <article class="card">
-          <div class="stat-top"><span class="stat-title">Active Customers</span><span class="stat-icon">♧</span></div>
-          <div class="stat-value" data-stat="customers">2,845</div>
-          <div class="stat-foot"><span class="positive">↗ 16.5%</span><span>vs previous period</span></div>
-        </article>
-      </section>
-
-      <div class="section-label">
-        <h2>Business Intelligence</h2>
-        <span>Illustrative preview data</span>
-      </div>
-
-      <section class="grid analytics">
-        <article class="card">
-          <div class="card-heading">
-            <div><h2>Revenue Performance</h2><p>Revenue movement over time</p></div>
-            <button class="icon-btn" data-action="chart-options" aria-label="Chart options">···</button>
+      <div id="dashboardHome">
+        <div class="welcome">
+          <div>
+            <h2>Welcome back, <span id="welcomeNameInline">there</span> 👋</h2>
+            <p>Your NEXORA workspace is ready to set up.</p>
           </div>
-          <div class="big-number" id="chartTotal">$128,450.80</div>
-          <div class="stat-foot"><span class="positive">↗ 12.8%</span><span>compared with previous period</span></div>
-          <div class="chart-wrap">
-            <svg id="revenueChart" viewBox="0 0 600 220" preserveAspectRatio="none" role="img" aria-label="Illustrative revenue trend chart">
+          <div class="status">● Account connected</div>
+        </div>
+
+        <div class="stats">
+          <article class="card">
+            <div class="stat-top">Total revenue <span class="stat-icon">$</span></div>
+            <div class="stat-value">$0.00</div>
+            <div class="stat-note">Connect transactions to begin</div>
+          </article>
+          <article class="card">
+            <div class="stat-top">Net profit <span class="stat-icon">↗</span></div>
+            <div class="stat-value">$0.00</div>
+            <div class="stat-note">Calculated from your records</div>
+          </article>
+          <article class="card">
+            <div class="stat-top">Active projects <span class="stat-icon">▦</span></div>
+            <div class="stat-value">0</div>
+            <div class="stat-note">Projects you are working on</div>
+          </article>
+          <article class="card">
+            <div class="stat-top">Customers <span class="stat-icon">♙</span></div>
+            <div class="stat-value">0</div>
+            <div class="stat-note">Your customer directory</div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="card">
+            <div class="card-heading">
+              <div><h3>Revenue overview</h3><p>Illustrative chart · No transactions connected yet</p></div>
+              <span class="pill">Sample preview</span>
+            </div>
+            <svg class="chart" viewBox="0 0 600 230" role="img" aria-label="Illustrative revenue chart">
               <defs>
-                <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#638cff" stop-opacity=".35"/>
-                  <stop offset="100%" stop-color="#638cff" stop-opacity="0"/>
+                <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#5794ff" stop-opacity=".36"/>
+                  <stop offset="100%" stop-color="#5794ff" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="chartLine" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#45d6e8"/>
+                  <stop offset="100%" stop-color="#9275ff"/>
                 </linearGradient>
               </defs>
-              <g class="chart-grid">
-                <line x1="0" y1="25" x2="600" y2="25"/>
-                <line x1="0" y1="70" x2="600" y2="70"/>
-                <line x1="0" y1="115" x2="600" y2="115"/>
-                <line x1="0" y1="160" x2="600" y2="160"/>
-                <line x1="0" y1="205" x2="600" y2="205"/>
+              <g class="gridline">
+                <line x1="45" y1="25" x2="585" y2="25"/><line x1="45" y1="65" x2="585" y2="65"/>
+                <line x1="45" y1="105" x2="585" y2="105"/><line x1="45" y1="145" x2="585" y2="145"/>
+                <line x1="45" y1="185" x2="585" y2="185"/>
               </g>
-              <path id="areaPath" fill="url(#areaFill)" d="M0 176 L50 148 L100 160 L150 115 L200 132 L250 92 L300 108 L350 68 L400 85 L450 47 L500 66 L550 30 L600 38 L600 220 L0 220 Z"/>
-              <path id="linePath" class="chart-line" d="M0 176 L50 148 L100 160 L150 115 L200 132 L250 92 L300 108 L350 68 L400 85 L450 47 L500 66 L550 30 L600 38"/>
+              <g><text x="5" y="29">$4k</text><text x="5" y="69">$3k</text><text x="5" y="109">$2k</text><text x="5" y="149">$1k</text><text x="16" y="189">$0</text></g>
+              <path d="M45 158 L125 132 L205 145 L285 89 L365 111 L445 55 L525 73 L585 36 L585 185 L45 185 Z" fill="url(#chartFill)"/>
+              <path d="M45 158 L125 132 L205 145 L285 89 L365 111 L445 55 L525 73 L585 36" fill="none" stroke="url(#chartLine)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#8c8bff" stroke="#151a2d" stroke-width="3">
+                <circle cx="125" cy="132" r="5"/><circle cx="285" cy="89" r="5"/><circle cx="445" cy="55" r="5"/><circle cx="585" cy="36" r="5"/>
+              </g>
+              <g><text x="40" y="215">Mon</text><text x="120" y="215">Tue</text><text x="200" y="215">Wed</text><text x="280" y="215">Thu</text><text x="360" y="215">Fri</text><text x="440" y="215">Sat</text><text x="520" y="215">Sun</text></g>
             </svg>
-          </div>
-          <div class="legend">
-            <span><i class="dot" style="background:#68a2ff"></i>Revenue</span>
-            <span><i class="dot" style="background:#a47aff"></i>Trend indicator</span>
-          </div>
-        </article>
+            <div class="legend"><span><i class="dot" style="background:#5794ff"></i>Revenue preview</span><span><i class="dot" style="background:#8e78ff"></i>Trend preview</span></div>
+          </article>
 
-        <article class="card">
-          <div class="card-heading">
-            <div><h2>Revenue Sources</h2><p>Illustrative source mix</p></div>
-            <button class="icon-btn" data-action="source-options" aria-label="Source options">···</button>
-          </div>
-          <div class="donut-area">
-            <div class="donut" role="img" aria-label="Illustrative revenue source distribution">
-              <div class="donut-center"><strong>100%</strong><span>Source mix</span></div>
+          <article class="card">
+            <div class="card-heading">
+              <div><h3>Business distribution</h3><p>Example breakdown only</p></div>
+              <span class="pill">Preview</span>
             </div>
-            <div class="legend-list">
-              <div class="legend-row"><i class="dot" style="background:#8c72ff"></i>Products <strong>38%</strong></div>
-              <div class="legend-row"><i class="dot" style="background:#42c8ec"></i>Services <strong>29%</strong></div>
-              <div class="legend-row"><i class="dot" style="background:#4d83ff"></i>Projects <strong>18%</strong></div>
-              <div class="legend-row"><i class="dot" style="background:#e68bd4"></i>Other <strong>15%</strong></div>
+            <div class="source-layout">
+              <svg class="donut" viewBox="0 0 160 160" role="img" aria-label="Illustrative business distribution">
+                <circle cx="80" cy="80" r="55" fill="none" stroke="#26334d" stroke-width="19"/>
+                <circle cx="80" cy="80" r="55" fill="none" stroke="#5794ff" stroke-width="19" stroke-dasharray="130 216" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="55" fill="none" stroke="#9879ff" stroke-width="19" stroke-dasharray="85 261" stroke-dashoffset="-137" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="55" fill="none" stroke="#45d6e8" stroke-width="19" stroke-dasharray="55 291" stroke-dashoffset="-228" transform="rotate(-90 80 80)"/>
+                <text x="80" y="76" text-anchor="middle" fill="#fff" style="font-size:19px;font-weight:800">100%</text>
+                <text x="80" y="93" text-anchor="middle" style="font-size:9px">SAMPLE</text>
+              </svg>
+              <div class="source-list">
+                <div class="source-item"><span><i class="dot" style="background:#5794ff"></i>Services</span><b>48%</b></div>
+                <div class="source-item"><span><i class="dot" style="background:#9879ff"></i>Products</span><b>31%</b></div>
+                <div class="source-item"><span><i class="dot" style="background:#45d6e8"></i>Other</span><b>21%</b></div>
+              </div>
             </div>
-          </div>
-        </article>
-      </section>
+          </article>
+        </div>
 
-      <div class="section-label">
-        <h2>Workspace Activity</h2>
-        <span>Sample records for layout preview</span>
+        <div class="bottom-grid">
+          <article class="card">
+            <div class="card-heading">
+              <div><h3>Recent transactions</h3><p>Your latest business activity</p></div>
+              <span class="pill">0 records</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>DESCRIPTION</th><th>DATE</th><th>STATUS</th><th>AMOUNT</th></tr></thead>
+                <tbody><tr><td colspan="4" class="table-empty">No transactions yet. This table will show your real records when the module is connected.</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-heading"><div><h3>Workspace activity</h3><p>Your account status</p></div></div>
+            <div class="activity"><div class="activity-icon">✓</div><div><strong>Authentication ready</strong><small>Your account has signed in successfully.</small></div></div>
+            <div class="activity"><div class="activity-icon">✦</div><div><strong>Workspace created</strong><small>Your private workspace profile is connected to your account.</small></div></div>
+            <div class="activity"><div class="activity-icon">↗</div><div><strong>Next: set up your business</strong><small>Transactions, inventory and projects will be connected in later steps.</small></div></div>
+          </article>
+        </div>
       </div>
 
-      <section class="grid lower-grid">
-        <article class="card">
-          <div class="card-heading">
-            <div><h2>Recent Transactions</h2><p>Latest business activity</p></div>
-            <button class="secondary-btn" data-action="transactions">View all ↗</button>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>REFERENCE</th><th>DESCRIPTION</th><th>AMOUNT</th><th>STATUS</th></tr></thead>
-              <tbody id="transactionsBody">
-                <tr><td>#NX-1042</td><td>Product sale</td><td class="positive">+$2,450</td><td><span class="status paid">Paid</span></td></tr>
-                <tr><td>#NX-1041</td><td>Client invoice</td><td class="positive">+$1,800</td><td><span class="status pending">Pending</span></td></tr>
-                <tr><td>#NX-1040</td><td>Software expense</td><td class="negative">−$320</td><td><span class="status paid">Paid</span></td></tr>
-                <tr><td>#NX-1039</td><td>Project milestone</td><td class="positive">+$950</td><td><span class="status review">Processing</span></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-heading"><div><h2>Activity Feed</h2><p>Workspace updates</p></div><span class="nav-tag">DEMO</span></div>
-          <div class="activity-list">
-            <div class="activity"><div class="activity-symbol">↗</div><div class="activity-content"><strong>Revenue report preview</strong><span>Analytics dashboard opened</span></div><time>Now</time></div>
-            <div class="activity"><div class="activity-symbol">◇</div><div class="activity-content"><strong>Workspace ready</strong><span>Sample dashboard loaded</span></div><time>Today</time></div>
-            <div class="activity"><div class="activity-symbol">✦</div><div class="activity-content"><strong>Insights panel</strong><span>Future data-driven insights module</span></div><time>Planned</time></div>
-          </div>
-        </article>
+      <section id="moduleNotice" class="card module-card" hidden>
+        <div class="eyebrow">NEXORA WORKSPACE</div>
+        <h2 id="moduleTitle">Module</h2>
+        <p>This module is planned for a future update. Your login is connected, but this section does not save business records yet.</p>
+        <p>We will connect each module to your own protected Firebase data in the next development steps.</p>
+        <button id="backToDashboard" class="primary" type="button" style="max-width:220px">Back to overview</button>
       </section>
 
-      <div class="insight">
-        <div class="insight-icon">✧</div>
-        <div><strong>Business Intelligence — Preview</strong><p>Connect your Firebase data to generate insights based on your actual business records.</p></div>
-      </div>
-
-      <footer class="footer">NEXORA · VERSION 0.1.0 · DASHBOARD PREVIEW</footer>
+      <footer id="versionLabel">NEXORA v0.2.0 · Business workspace</footer>
     </main>
-  </div>
+  </section>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  <script>
-    const toast = document.getElementById("toast");
-    let toastTimeout;
-
-    function notify(message) {
-      toast.textContent = message;
-      toast.classList.add("show");
-      clearTimeout(toastTimeout);
-      toastTimeout = setTimeout(() => toast.classList.remove("show"), 2600);
-    }
-
-    const pageDescriptions = {
-      Dashboard: "Your business at a glance. Make every decision count.",
-      Analytics: "Explore performance patterns and business trends.",
-      Transactions: "Track business income, expenses and payments.",
-      Customers: "Manage customer relationships and activity.",
-      Projects: "Organize projects, tasks and milestones.",
-      Inventory: "Manage products, quantities and stock activity.",
-      Reports: "Review business performance and reporting tools.",
-      Team: "Manage workspace members and access roles.",
-      Automations: "Plan repeatable workflows and business rules.",
-      Workspace: "Customize your profession and workspace modules.",
-      Settings: "Manage your workspace preferences.",
-      Subscription: "Explore plan features and usage limits."
-    };
-
-    document.getElementById("navigation").addEventListener("click", event => {
-      const button = event.target.closest("button[data-page]");
-      if (!button) return;
-
-      document.querySelectorAll("[data-page]").forEach(item => item.classList.remove("active"));
-      button.classList.add("active");
-
-      const page = button.dataset.page;
-      document.getElementById("pageTitle").textContent =
-        page === "Dashboard" ? "Dashboard Overview" : page;
-      document.getElementById("pageSubtitle").textContent =
-        pageDescriptions[page] || "Your workspace overview.";
-
-      if (page !== "Dashboard") {
-        notify(page + " module is planned for the next development phase.");
-      }
-
-      document.getElementById("sidebar").classList.remove("open");
-    });
-
-    document.getElementById("menuButton").addEventListener("click", () => {
-      document.getElementById("sidebar").classList.toggle("open");
-    });
-
-    document.querySelectorAll("[data-action]").forEach(button => {
-      button.addEventListener("click", () => {
-        const actions = {
-          plans: "Subscription plans will be connected in a later phase.",
-          notifications: "Your notification center will appear here.",
-          help: "Help center is planned for a future release.",
-          "chart-options": "Chart settings will be available when analytics is connected.",
-          "source-options": "Source filters will be connected to your business records.",
-          transactions: "Transaction management is planned for the next phase."
-        };
-        notify(actions[button.dataset.action] || "This feature will be connected in a later phase.");
-      });
-    });
-
-    document.getElementById("dateFilter").addEventListener("change", event => {
-      const days = event.target.value;
-      notify("Selected period: last " + days + " days. Live data filtering is not connected yet.");
-    });
-
-    document.getElementById("searchInput").addEventListener("keydown", event => {
-      if (event.key === "Enter" && event.target.value.trim()) {
-        notify("Search will work across your records after database integration.");
-      }
-    });
-
-    document.getElementById("exportButton").addEventListener("click", () => {
-      const csv = [
-        ["Metric", "Sample value"],
-        ["Revenue", "$128450.80"],
-        ["Net Profit", "$32680"],
-        ["Expenses", "$21940"],
-        ["Active Customers", "2845"]
-      ].map(row => row.map(value => '"' + value.replace(/"/g, '""') + '"').join(",")).join("\n");
-
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "nexora-dashboard-preview.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      notify("Preview CSV exported. These are sample values, not live business data.");
-    });
-  </script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -1,1011 +1,296 @@
-
-/* =========================================================
-   NEXORA — BUSINESS MANAGEMENT PLATFORM
-   Version 1.1.0
-   Firebase Authentication + Firestore
-   ========================================================= */
-
+// NEXORA — Business Command Center
+// Version 2.0.0
 import { auth, db, googleProvider } from "./firebase.js";
-
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  sendPasswordResetEmail,
-  updateProfile,
-  onAuthStateChanged,
-  signOut
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
+  onAuthStateChanged, sendPasswordResetEmail, updateProfile, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-
 import {
-  doc, getDoc, setDoc, collection, addDoc, getDocs,
-  updateDoc, deleteDoc, serverTimestamp
+  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
+  serverTimestamp, query, orderBy, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-const VERSION = "1.1.0";
-const $ = id => document.getElementById(id);
-
-let user = null;
-let profile = {};
-let workspaceId = "default";
-let workspaceName = "My Business";
-let page = "dashboard";
-let records = {};
-let noticeTimer;
-
+const VERSION = "2.0.0";
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+const money = n => new Intl.NumberFormat("en-US",{style:"currency",currency:state.settings?.currency||"USD",maximumFractionDigits:2}).format(Number(n)||0);
+const dateFmt = v => { if(!v)return "—"; let d=v?.toDate?v.toDate():new Date(v); return Number.isNaN(d.getTime())?"—":d.toLocaleDateString(); };
+const isoToday = () => new Date().toISOString().slice(0,10);
+const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const slug = v => String(v||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const state = { user:null, profile:null, page:"dashboard", authMode:"login", records:{}, settings:{businessName:"My Business",currency:"USD",taxRate:0,dateFormat:"local"}, workspaceId:"default", workspaces:[], search:"", busy:false };
 const modules = {
-  transactions: "Transactions",
-  customers: "Customers",
-  suppliers: "Suppliers",
-  inventory: "Inventory",
-  projects: "Projects",
-  tasks: "Tasks",
-  invoices: "Invoices",
-  bills: "Bills",
-  appointments: "Appointments",
-  branches: "Branches"
+ transactions:{title:"Transactions",crumb:"Income, expenses and transfers",collection:"transactions",icon:"↔",fields:[
+  ["description","Description","text",true],["type","Type","select",true,["Income","Expense","Transfer"]],["category","Category","text",true],["amount","Amount","number",true],["date","Date","date",true],["paymentMethod","Payment Method","select",false,["Cash","Bank Transfer","Card","Online","Other"]],["reference","Reference","text",false],["notes","Notes","textarea",false]]},
+ customers:{title:"Customers & Leads",crumb:"Customer relationships and sales pipeline",collection:"customers",icon:"♙",fields:[
+  ["name","Customer / Lead Name","text",true],["type","Type","select",true,["Customer","Lead"]],["email","Email","email",false],["phone","Phone","tel",false],["company","Company","text",false],["status","Status","select",true,["New","Contacted","Qualified","Proposal","Won","Lost","Active"]],["value","Potential Value","number",false],["notes","Notes","textarea",false]]},
+ suppliers:{title:"Suppliers",crumb:"Supplier directory and contact records",collection:"suppliers",icon:"♧",fields:[
+  ["name","Supplier Name","text",true],["company","Company","text",false],["email","Email","email",false],["phone","Phone","tel",false],["address","Address","text",false],["status","Status","select",true,["Active","Inactive"]],["notes","Notes","textarea",false]]},
+ inventory:{title:"Inventory",crumb:"Products, stock levels and reorder alerts",collection:"inventory",icon:"▦",fields:[
+  ["name","Product Name","text",true],["sku","SKU / Barcode","text",false],["category","Category","text",true],["quantity","Stock Quantity","number",true],["minStock","Minimum Stock","number",false],["cost","Unit Cost","number",true],["price","Selling Price","number",true],["supplier","Supplier","text",false],["expiry","Expiry Date","date",false],["notes","Notes","textarea",false]]},
+ projects:{title:"Projects & Tasks",crumb:"Projects, milestones and task tracking",collection:"projects",icon:"◷",fields:[
+  ["name","Project / Task Name","text",true],["type","Record Type","select",true,["Project","Task"]],["status","Status","select",true,["Not Started","In Progress","On Hold","Completed"]],["priority","Priority","select",true,["Low","Medium","High","Urgent"]],["startDate","Start Date","date",false],["dueDate","Due Date","date",false],["assignee","Assigned To","text",false],["progress","Progress (%)","number",false],["budget","Budget","number",false],["notes","Notes","textarea",false]]},
+ invoices:{title:"Invoices & Quotes",crumb:"Sales documents and payment status",collection:"invoices",icon:"▤",fields:[
+  ["number","Invoice / Quote Number","text",true],["type","Document Type","select",true,["Invoice","Quote","Estimate","Receipt","Credit Note"]],["customer","Customer","text",true],["issueDate","Issue Date","date",true],["dueDate","Due Date","date",false],["amount","Total Amount","number",true],["tax","Tax Amount","number",false],["status","Status","select",true,["Draft","Sent","Partially Paid","Paid","Overdue","Cancelled"]],["notes","Notes","textarea",false]]},
+ bills:{title:"Bills & Purchases",crumb:"Supplier bills and outgoing payments",collection:"bills",icon:"▧",fields:[
+  ["number","Bill Number","text",true],["supplier","Supplier","text",true],["date","Bill Date","date",true],["dueDate","Due Date","date",false],["amount","Amount","number",true],["status","Status","select",true,["Unpaid","Partially Paid","Paid","Overdue"]],["category","Category","text",false],["notes","Notes","textarea",false]]},
+ appointments:{title:"Appointments",crumb:"Bookings, visits and reminders",collection:"appointments",icon:"▣",fields:[
+  ["title","Appointment Title","text",true],["person","Customer / Person","text",false],["date","Date","date",true],["time","Time","time",false],["status","Status","select",true,["Scheduled","Confirmed","Completed","Cancelled","No Show"]],["location","Location","text",false],["notes","Notes","textarea",false]]},
+ branches:{title:"Branches",crumb:"Locations, branches and warehouses",collection:"branches",icon:"⌂",fields:[
+  ["name","Branch / Warehouse Name","text",true],["code","Branch Code","text",false],["manager","Manager","text",false],["phone","Phone","tel",false],["address","Address","text",false],["status","Status","select",true,["Active","Inactive"]],["notes","Notes","textarea",false]]}
 };
-
-const menu = [
-  ["dashboard", "⌂", "Dashboard"],
-  ["transactions", "↔", "Transactions"],
-  ["customers", "♙", "Customers"],
-  ["suppliers", "♧", "Suppliers"],
-  ["inventory", "▦", "Inventory"],
-  ["projects", "◈", "Projects"],
-  ["tasks", "☷", "Tasks"],
-  ["invoices", "▤", "Invoices"],
-  ["bills", "▧", "Bills"],
-  ["reports", "▥", "Reports"],
-  ["appointments", "◷", "Appointments"],
-  ["branches", "⌖", "Branches"],
-  ["settings", "⚙", "Settings"]
-];
-
-const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-}[c]));
-
-const today = () => new Date().toISOString().slice(0, 10);
-const money = value => {
-  const currency = profile.currency || "PKR";
-  try {
-    return new Intl.NumberFormat("en", {
-      style: "currency", currency, maximumFractionDigits: 2
-    }).format(Number(value) || 0);
-  } catch {
-    return `${currency} ${(Number(value) || 0).toFixed(2)}`;
+function notify(msg,error=false){const el=document.createElement("div");el.className="toast"+(error?" error":"");el.textContent=msg;$("#toastRoot").append(el);setTimeout(()=>el.remove(),3600)}
+function userCollection(name){if(!state.user)throw Error("Please sign in first.");return collection(db,"users",state.user.uid,name)}
+function userDoc(){return doc(db,"users",state.user.uid)}
+function activeCollection(name){return userCollection(name)}
+function belongsHere(r){return (r.workspaceId||"default")===state.workspaceId}
+async function getRecords(name, allWorkspaces=false){
+ const snap=await getDocs(activeCollection(name));
+ let rows=snap.docs.map(d=>({id:d.id,...d.data()}));
+ if(name!=="workspaces"&&!allWorkspaces)rows=rows.filter(belongsHere);
+ rows.sort((a,b)=>String(b.date||b.issueDate||b.createdAt?.seconds||"").localeCompare(String(a.date||a.issueDate||a.createdAt?.seconds||"")));
+ state.records[name]=rows;return rows;
+}
+async function ensureProfile(user){
+ const ref=userDoc(),snap=await getDoc(ref);
+ if(!snap.exists()){
+  const profile={uid:user.uid,name:user.displayName||user.email?.split("@")[0]||"NEXORA User",email:user.email||"",role:"user",plan:"free",businessName:"My Business",currency:"USD",taxRate:0,dateFormat:"local",createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  await setDoc(ref,profile);state.profile={...profile};
+ }else{
+  const p=snap.data();
+  const patch={uid:user.uid,email:user.email||p.email||"",name:p.name||user.displayName||user.email?.split("@")[0]||"NEXORA User",role:p.role||"user",plan:p.plan||"free",businessName:p.businessName||"My Business",currency:p.currency||"USD",taxRate:Number(p.taxRate)||0,dateFormat:p.dateFormat||"local",updatedAt:serverTimestamp()};
+  await setDoc(ref,patch,{merge:true});state.profile={...p,...patch};
+ }
+ state.settings={businessName:state.profile.businessName,currency:state.profile.currency||"USD",taxRate:Number(state.profile.taxRate)||0,dateFormat:state.profile.dateFormat||"local"};
+}
+async function loadAll(){
+ for(const name of [...Object.keys(modules),"workspaces"])await getRecords(name,name==="workspaces");
+ const ws=state.records.workspaces||[];
+ state.workspaces=[{id:"default",name:"Main Workspace",description:"Your primary business workspace"},...ws.map(w=>({id:w.id,name:w.name||"Untitled Workspace",description:w.description||""})).filter(w=>w.id!=="default")];
+ if(!state.workspaces.some(w=>w.id===state.workspaceId))state.workspaceId="default";
+ renderWorkspaceSelect();
+}
+function renderWorkspaceSelect(){
+ const el=$("#workspaceSelect");if(!el)return;
+ el.innerHTML=state.workspaces.map(w=>`<option value="${esc(w.id)}"${w.id===state.workspaceId?" selected":""}>${esc(w.name)}</option>`).join("");
+}
+function setAuthMode(mode){
+ state.authMode=mode;const reg=mode==="register";
+ $("#authHeading").textContent=reg?"Create your NEXORA account":"Welcome back";
+ $("#authDescription").textContent=reg?"Create your secure business workspace in minutes.":"Sign in to manage your business from one command center.";
+ $("#nameField").classList.toggle("hidden",!reg);$("#forgotPassword").classList.toggle("hidden",reg);
+ $("#authSubmit").textContent=reg?"Create Account":"Sign In";$("#showLogin").className="btn"+(!reg?" primary":"");$("#showRegister").className="btn"+(reg?" primary":"");
+ $("#authMessage").classList.add("hidden");
+}
+function showAuthMessage(msg,error=false){const el=$("#authMessage");el.textContent=msg;el.classList.remove("hidden");el.style.background=error?"#3a1d2a":"#18243b"}
+async function handleAuth(e){
+ e.preventDefault();const email=$("#authEmail").value.trim(),password=$("#authPassword").value,name=$("#authName").value.trim();
+ const btn=$("#authSubmit");btn.disabled=true;btn.textContent="Please wait…";
+ try{
+  if(state.authMode==="register"){
+   if(!name)throw Error("Please enter your full name.");
+   const cred=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(cred.user,{displayName:name});
+  }else await signInWithEmailAndPassword(auth,email,password);
+ }catch(err){showAuthMessage(friendlyError(err),true)}finally{btn.disabled=false;btn.textContent=state.authMode==="register"?"Create Account":"Sign In"}
+}
+function friendlyError(err){
+ const code=err?.code||"";
+ const map={"auth/email-already-in-use":"This email already has an account. Please sign in.","auth/invalid-email":"Please enter a valid email address.","auth/weak-password":"Use a password with at least 6 characters.","auth/invalid-credential":"Email or password is incorrect.","auth/user-not-found":"No account was found for this email.","auth/wrong-password":"Email or password is incorrect.","auth/too-many-requests":"Too many attempts. Please try again later.","permission-denied":"Firestore permission denied. Please check your Firebase rules.","unavailable":"Network unavailable. Check your internet connection."};
+ return map[code]||err?.message||"Something went wrong. Please try again.";
+}
+const pageMeta={dashboard:["Command Center","Your business at a glance"],reports:["Reports & Data","Business performance and data tools"],workspaces:["Business Workspaces","Manage separate work areas"],settings:["Business Settings","Configure your business profile"]};
+function navTo(page){
+ state.page=page;$$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+ const meta=modules[page]? [modules[page].title,modules[page].crumb] : pageMeta[page]||[page,"NEXORA Workspace"];
+ $("#topTitle").textContent=meta[0];$("#topCrumb").textContent=meta[1];$("#sidebar").classList.remove("open");renderPage();
+}
+function statCard(label,value,icon,color,foot="Current workspace"){
+ return `<div class="stat" style="--glow:${color}"><div class="stat-top"><div class="stat-label">${esc(label)}</div><div class="stat-icon">${icon}</div></div><div class="stat-value">${esc(value)}</div><div class="stat-foot">${esc(foot)}</div></div>`;
+}
+function tableFor(name,rows){
+ const m=modules[name];if(!m)return "";
+ const cols=m.fields.filter(f=>["name","description","type","category","amount","date","status","quantity","price","customer","supplier","dueDate","priority","number","title","progress"].includes(f[0])).slice(0,5);
+ if(!rows.length)return `<div class="empty">No records yet. Use <b>＋ Add New</b> to create your first record.</div>`;
+ return `<div class="table-wrap"><table><thead><tr>${cols.map(f=>`<th>${esc(f[1])}</th>`).join("")}<th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(f=>`<td>${cellValue(f[0],r[f[0]],r)}</td>`).join("")}<td><div class="table-actions"><button class="icon-btn" data-edit="${esc(name)}:${esc(r.id)}" title="Edit">✎</button><button class="icon-btn" data-delete="${esc(name)}:${esc(r.id)}" title="Delete">×</button></div></td></tr>`).join("")}</tbody></table></div>`;
+}
+function cellValue(key,val,row){
+ if(val===undefined||val===null||val==="")return '<span class="muted">—</span>';
+ if(["amount","price","cost","budget","value"].includes(key))return `<span class="${key==="amount"&&row.type==="Expense"?"negative":""}">${money(val)}</span>`;
+ if(["date","dueDate","issueDate","startDate","expiry"].includes(key))return esc(dateFmt(val));
+ if(key==="status")return `<span class="status ${/paid|completed|won|active|confirmed/i.test(val)?"good":/overdue|lost|cancelled|urgent/i.test(val)?"bad":/progress|sent|qualified|contacted/i.test(val)?"warn":""}">${esc(val)}</span>`;
+ if(key==="quantity")return `<span class="${Number(val)<=Number(row.minStock||0)?"negative":""}">${esc(val)}</span>`;
+ if(key==="progress")return `${esc(val)}%`;
+ return esc(val);
+}
+function pageToolbar(name){
+ return `<div class="page-toolbar"><div class="toolbar-left"><input class="filter" id="moduleSearch" placeholder="Filter records…" value="${esc(state.search)}"></div><div class="toolbar-right"><button class="btn" data-export="${name}">Export CSV</button><button class="btn primary" data-add="${name}">＋ Add New</button></div></div>`;
+}
+function dashboardPage(){
+ const tx=state.records.transactions||[],inv=state.records.inventory||[],customers=state.records.customers||[],projects=state.records.projects||[],invoices=state.records.invoices||[];
+ const income=tx.filter(t=>t.type==="Income").reduce((s,t)=>s+Number(t.amount||0),0),expenses=tx.filter(t=>t.type==="Expense").reduce((s,t)=>s+Number(t.amount||0),0),profit=income-expenses;
+ const low=inv.filter(i=>Number(i.quantity||0)<=Number(i.minStock||0)).length;
+ const openTasks=projects.filter(p=>p.status!=="Completed").length;
+ const recent=[...tx].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,6);
+ const months=Array.from({length:6},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-5+i);return {key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`,label:d.toLocaleString("en-US",{month:"short"}),income:0,expense:0}});
+ tx.forEach(t=>{const key=String(t.date||"").slice(0,7),m=months.find(x=>x.key===key);if(m){if(t.type==="Income")m.income+=Number(t.amount||0);if(t.type==="Expense")m.expense+=Number(t.amount||0)}});
+ const max=Math.max(1,...months.flatMap(m=>[m.income,m.expense]));
+ return `<div class="welcome"><div><div class="eyebrow">BUSINESS INTELLIGENCE · V${VERSION}</div><h1>Good to see you, ${esc(state.profile?.name?.split(" ")[0]||"there")}.</h1><p>Here is what is happening across ${esc(state.settings.businessName||"your business")}.</p></div><button class="btn primary" data-add="transactions">＋ Record Transaction</button></div>
+ <div class="grid stats">${statCard("Total Income",money(income),"↗","var(--green)",`${tx.filter(t=>t.type==="Income").length} income entries`)}${statCard("Total Expenses",money(expenses),"↘","var(--red)",`${tx.filter(t=>t.type==="Expense").length} expense entries`)}${statCard("Net Profit / Loss",money(profit),"◈","var(--blue)",profit>=0?"Income exceeds expenses":"Expenses exceed income")}${statCard("Inventory Alerts",String(low),"▦","var(--amber)",`${inv.length} products tracked`)}</div>
+ <div class="grid two-col"><section class="panel"><div class="panel-head"><div><div class="panel-title">Cash Flow Overview</div><div class="panel-sub">Income and expenses · last 6 months</div></div><span class="status">LIVE DATA</span></div><div class="chart">${months.map(m=>`<div class="bar-wrap" title="${m.label}: ${money(m.income)} income / ${money(m.expense)} expense"><div style="display:flex;align-items:flex-end;justify-content:center;gap:4px;height:100%;width:100%"><div class="bar" style="height:${Math.max(2,m.income/max*100)}%;background:linear-gradient(180deg,#43ddb3,#1c8f83)"></div><div class="bar" style="height:${Math.max(2,m.expense/max*100)}%;background:linear-gradient(180deg,#a47aff,#5d59d9)"></div></div><div class="bar-label">${m.label}</div></div>`).join("")}</div><div class="legend"><span><i class="dot" style="background:#43ddb3"></i>Income</span><span><i class="dot" style="background:#8a73f3"></i>Expenses</span></div></section>
+ <section class="panel"><div class="panel-head"><div><div class="panel-title">Operations Snapshot</div><div class="panel-sub">Key activity indicators</div></div></div><div class="list">${[['Customers & Leads',customers.length,'♙'],['Active Projects / Tasks',openTasks,'◷'],['Invoices Issued',invoices.length,'▤'],['Products in Inventory',inv.length,'▦']].map(x=>`<div class="list-row"><div style="display:flex;gap:10px;align-items:center"><div class="stat-icon">${x[2]}</div><div class="list-main"><div class="list-name">${x[0]}</div><div class="list-meta">Current workspace</div></div></div><div class="amount">${x[1]}</div></div>`).join("")}</div></section></div>
+ <section class="panel" style="margin-top:18px"><div class="panel-head"><div><div class="panel-title">Recent Transactions</div><div class="panel-sub">Latest income and expenses</div></div><button class="btn" data-goto="transactions">View All →</button></div>${tableFor("transactions",recent)}</section>
+ <div class="footer-note">NEXORA v${VERSION} · One Platform. Every Profession.</div>`;
+}
+function modulePage(name){
+ let rows=(state.records[name]||[]);const q=state.search.trim().toLowerCase();
+ if(q)rows=rows.filter(r=>Object.values(r).some(v=>String(v??"").toLowerCase().includes(q)));
+ return `<div class="welcome"><div><div class="eyebrow">NEXORA WORKSPACE</div><h1>${esc(modules[name].title)}</h1><p>${esc(modules[name].crumb)}</p></div></div>${pageToolbar(name)}<section class="panel"><div class="panel-head"><div><div class="panel-title">${rows.length} Records</div><div class="panel-sub">Stored securely under your account and workspace.</div></div></div>${tableFor(name,rows)}</section>`;
+}
+function workspacesPage(){
+ const rows=state.workspaces;
+ return `<div class="welcome"><div><div class="eyebrow">MULTI-BUSINESS MANAGEMENT</div><h1>Business Workspaces</h1><p>Keep each business workspace logically separate within your account.</p></div><button class="btn primary" data-add="workspaces">＋ New Workspace</button></div><div class="notice" style="margin-bottom:18px">Workspace data is separated by workspace ID in the app. This is a personal account feature, not shared team access. Team membership requires a separate permission model.</div><div class="grid section-grid">${rows.map(w=>`<div class="panel"><div class="stat-icon">▣</div><h3 style="font:800 15px Manrope;margin:14px 0 6px">${esc(w.name)}</h3><p class="muted small">${esc(w.description||"Business workspace")}</p><div style="display:flex;gap:8px;margin-top:18px"><button class="btn ${state.workspaceId===w.id?"good":"primary"}" data-switch-workspace="${esc(w.id)}">${state.workspaceId===w.id?"Current Workspace":"Switch Workspace"}</button>${w.id!=="default"?`<button class="btn" data-edit="workspaces:${esc(w.id)}">Edit</button>`:""}</div></div>`).join("")}</div>`;
+}
+function reportsPage(){
+ const tx=state.records.transactions||[],income=tx.filter(t=>t.type==="Income").reduce((a,t)=>a+Number(t.amount||0),0),expense=tx.filter(t=>t.type==="Expense").reduce((a,t)=>a+Number(t.amount||0),0);
+ return `<div class="welcome"><div><div class="eyebrow">INSIGHTS & DATA TOOLS</div><h1>Reports & Data</h1><p>Review performance and export your workspace data.</p></div></div><div class="grid stats">${statCard("Income",money(income),"↗","var(--green)")}${statCard("Expenses",money(expense),"↘","var(--red)")}${statCard("Net Result",money(income-expense),"◈","var(--blue)")}${statCard("Transactions",String(tx.length),"↔","var(--purple)")}</div><div class="grid section-grid">${Object.keys(modules).map(n=>`<div class="feature-card"><div class="stat-icon">${modules[n].icon}</div><h3>${modules[n].title}</h3><p>Export current workspace records to CSV for backup, analysis or migration.</p><button class="btn" style="margin-top:14px" data-export="${n}">Export CSV</button></div>`).join("")}</div><section class="panel" style="margin-top:18px"><div class="panel-head"><div><div class="panel-title">CSV Import</div><div class="panel-sub">Import simple records into a selected module. Existing data is not overwritten.</div></div></div><div class="field"><label>DESTINATION MODULE</label><select id="importModule" class="filter">${Object.keys(modules).map(n=>`<option value="${n}">${modules[n].title}</option>`).join("")}</select></div><div class="field"><label>CSV FILE</label><input id="importFile" type="file" accept=".csv,text/csv"></div><button class="btn primary" id="runImport">Import CSV</button><p class="small muted">Use a header row. Import is best-effort and supports plain text fields, numbers and dates. Review records after import.</p></section>`;
+}
+function settingsPage(){
+ return `<div class="welcome"><div><div class="eyebrow">YOUR BUSINESS PROFILE</div><h1>Business Settings</h1><p>Personalize the command center for your business.</p></div></div><div class="grid settings-grid"><section class="panel"><div class="panel-head"><div><div class="panel-title">Business Preferences</div><div class="panel-sub">These settings apply to your account.</div></div></div><form id="settingsForm"><div class="field"><label>BUSINESS NAME</label><input name="businessName" required value="${esc(state.settings.businessName)}"></div><div class="field"><label>REPORTING CURRENCY</label><select name="currency">${["USD","PKR","GBP","EUR","AED","SAR","INR","CAD","AUD"].map(c=>`<option ${state.settings.currency===c?"selected":""}>${c}</option>`).join("")}</select></div><div class="field"><label>DEFAULT TAX RATE (%)</label><input name="taxRate" type="number" min="0" max="100" step=".01" value="${Number(state.settings.taxRate)||0}"></div><div class="field"><label>DATE FORMAT</label><select name="dateFormat"><option value="local" ${state.settings.dateFormat==="local"?"selected":""}>Local format</option><option value="iso" ${state.settings.dateFormat==="iso"?"selected":""}>YYYY-MM-DD</option></select></div><button class="btn primary">Save Preferences</button></form></section><section class="panel"><div class="panel-head"><div><div class="panel-title">Account & Security</div><div class="panel-sub">Signed-in Firebase account details</div></div></div><div class="list"><div class="list-row"><div><div class="list-name">Name</div><div class="list-meta">${esc(state.profile?.name||"NEXORA User")}</div></div></div><div class="list-row"><div><div class="list-name">Email</div><div class="list-meta">${esc(state.user?.email||"")}</div></div></div><div class="list-row"><div><div class="list-name">Plan</div><div class="list-meta">${esc(state.profile?.plan||"free").toUpperCase()} · plan display only; billing is not connected</div></div></div><div class="list-row"><div><div class="list-name">App Version</div><div class="list-meta">NEXORA ${VERSION}</div></div></div></div><div class="notice" style="margin-top:16px">Never share your Firebase service-account key. The web configuration key is intended for client apps; secure access depends on Firestore rules and Firebase Authentication.</div><button class="btn" id="exportBackup" style="margin-top:14px">Export Workspace Backup (JSON)</button></section></div>`;
+}
+function renderPage(){
+ if(!state.user)return;
+ if(state.page==="dashboard")$("#pageContent").innerHTML=dashboardPage();
+ else if(modules[state.page])$("#pageContent").innerHTML=modulePage(state.page);
+ else if(state.page==="workspaces")$("#pageContent").innerHTML=workspacesPage();
+ else if(state.page==="reports")$("#pageContent").innerHTML=reportsPage();
+ else if(state.page==="settings")$("#pageContent").innerHTML=settingsPage();
+ else $("#pageContent").innerHTML=`<section class="panel"><h2>Module unavailable</h2><p class="muted">Choose a module from the navigation.</p></section>`;
+}
+function fieldControl(f,record={}){
+ const [key,label,type,required,options]=f;let val=record[key]??"";
+ if(type==="date"&&!val&&["date","issueDate","startDate"].includes(key))val=isoToday();
+ const req=required?"required":"";
+ if(type==="select")return `<div class="field"><label>${esc(label.toUpperCase())}${required?" *":""}</label><select name="${esc(key)}" ${req}>${(options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===o?"selected":""}>${esc(o)}</option>`).join("")}</select></div>`;
+ if(type==="textarea")return `<div class="field span-2"><label>${esc(label.toUpperCase())}</label><textarea name="${esc(key)}" ${req}>${esc(val)}</textarea></div>`;
+ return `<div class="field"><label>${esc(label.toUpperCase())}${required?" *":""}</label><input name="${esc(key)}" type="${esc(type)}" value="${esc(val)}" ${type==="number"?'step="any"':''} ${req}></div>`;
+}
+function openRecordModal(name,id=null){
+ if(name==="workspaces"){
+  const record=id?state.workspaces.find(w=>w.id===id)||{}:{};
+  modal(`Workspace ${id?"Settings":"Creation"}`,`<form id="recordForm"><div class="field"><label>WORKSPACE NAME</label><input name="name" required value="${esc(record.name||"")}" placeholder="e.g. Retail Business"></div><div class="field"><label>DESCRIPTION</label><textarea name="description">${esc(record.description||"")}</textarea></div></form>`,async form=>{
+   const data=Object.fromEntries(new FormData(form));if(!data.name.trim())throw Error("Workspace name is required.");
+   if(id){await updateDoc(doc(db,"users",state.user.uid,"workspaces",id),{name:data.name.trim(),description:data.description,updatedAt:serverTimestamp()})}
+   else{const ref=await addDoc(userCollection("workspaces"),{...data,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});state.workspaceId=ref.id}
+   await loadAll();navTo("workspaces");notify("Workspace saved.");
+  });return;
+ }
+ const m=modules[name];if(!m)return;
+ const record=id?(state.records[name]||[]).find(r=>r.id===id)||{}:{};
+ modal(`${id?"Edit":"Add"} ${m.title}`,`<form id="recordForm"><div class="form-grid">${m.fields.map(f=>fieldControl(f,record)).join("")}</div></form>`,async form=>{
+  const fd=new FormData(form),data={};
+  for(const f of m.fields){const k=f[0],v=fd.get(k);if(v!==null&&v!=="")data[k]=f[2]==="number"?Number(v):String(v).trim();else data[k]=f[2]==="number"?0:""}
+  for(const f of m.fields)if(f[3]&&!String(data[f[0]]??"").trim())throw Error(`${f[1]} is required.`);
+  data.workspaceId=state.workspaceId;data.updatedAt=serverTimestamp();
+  if(id)await updateDoc(doc(db,"users",state.user.uid,m.collection,id),data);
+  else await addDoc(userCollection(m.collection),{...data,createdAt:serverTimestamp()});
+  await getRecords(name);closeModal();renderPage();notify(id?"Record updated.":"Record created.");
+ });
+}
+function modal(title,body,onSave){
+ $("#modalRoot").innerHTML=`<div class="modal-backdrop" id="modalBackdrop"><section class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" id="modalClose">×</button></div><div class="modal-body">${body}</div><div class="modal-foot"><button class="btn" id="modalCancel">Cancel</button><button class="btn primary" id="modalSave">Save Record</button></div></section></div>`;
+ const close=()=>closeModal();$("#modalClose").onclick=close;$("#modalCancel").onclick=close;
+ $("#modalBackdrop").addEventListener("click",e=>{if(e.target.id==="modalBackdrop")close()});
+ $("#modalSave").onclick=async()=>{const form=$("#recordForm");if(form&&!form.reportValidity())return;const b=$("#modalSave");b.disabled=true;b.textContent="Saving…";try{await onSave(form);if($("#modalRoot").innerHTML)closeModal()}catch(err){notify(friendlyError(err),true)}finally{b.disabled=false;b.textContent="Save Record"}};
+}
+function closeModal(){$("#modalRoot").innerHTML=""}
+async function deleteRecord(name,id){
+ if(!confirm("Delete this record permanently? This action cannot be undone."))return;
+ try{await deleteDoc(doc(db,"users",state.user.uid,name,id));await getRecords(name);renderPage();notify("Record deleted.")}catch(e){notify(friendlyError(e),true)}
+}
+function csvEscape(v){const s=String(v??"");return /[",\n\r]/.test(s)?`"${s.replace(/"/g,'""')}"`:s}
+function exportCSV(name){
+ const rows=state.records[name]||[];if(!rows.length){notify("There are no records to export.");return}
+ const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(k=>!["id","workspaceId"].includes(k));
+ const csv=[keys.map(csvEscape).join(","),...rows.map(r=>keys.map(k=>csvEscape(r[k]?.toDate?r[k].toDate().toISOString():r[k])).join(","))].join("\r\n");
+ download(`${name}-${state.workspaceId}-${isoToday()}.csv`,csv,"text/csv;charset=utf-8");notify("CSV export ready.");
+}
+function download(name,content,type){
+ const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function parseCSV(text){
+ const rows=[];let row=[],cell="",quoted=false;
+ for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&quoted&&n==='"'){cell+='"';i++}else if(c==='"'){quoted=!quoted}else if(c===","&&!quoted){row.push(cell);cell=""}else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&n==="\n")i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=""}else cell+=c}
+ if(cell.length||row.length){row.push(cell);rows.push(row)}return rows;
+}
+function normalizeKey(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+async function importCSV(){
+ const file=$("#importFile")?.files?.[0],name=$("#importModule")?.value;if(!file)return notify("Choose a CSV file first.",true);
+ const m=modules[name];if(!m)return;
+ try{
+  const raw=parseCSV(await file.text());if(raw.length<2)throw Error("CSV must contain a header row and at least one data row.");
+  const fields=m.fields,lookup={};fields.forEach(f=>{lookup[normalizeKey(f[0])]=f[0];lookup[normalizeKey(f[1])]=f[0]});
+  const headers=raw[0].map(h=>lookup[normalizeKey(h)]||null);let count=0;
+  for(const row of raw.slice(1)){const data={workspaceId:state.workspaceId,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+   headers.forEach((key,i)=>{if(!key)return;const f=fields.find(x=>x[0]===key);let v=(row[i]||"").trim();if(!v)return;data[key]=f?.[2]==="number"?Number(v):v});
+   if(!fields.some(f=>f[3]&&!String(data[f[0]]??"").trim())){await addDoc(userCollection(m.collection),data);count++}
   }
-};
-
-function notify(message, type = "success") {
-  let box = $("nxToast");
-  if (!box) return;
-  box.textContent = message;
-  box.dataset.type = type;
-  box.classList.add("show");
-  clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => box.classList.remove("show"), 3500);
+  await getRecords(name);notify(`Imported ${count} record(s). ${raw.length-1-count} row(s) skipped.`);renderPage();
+ }catch(e){notify(friendlyError(e),true)}
 }
-
-function iconText(text) {
-  return `<span class="nx-icon">${text}</span>`;
+async function saveSettings(e){
+ e.preventDefault();const fd=new FormData(e.currentTarget);const patch={businessName:String(fd.get("businessName")||"My Business").trim(),currency:String(fd.get("currency")||"USD"),taxRate:Number(fd.get("taxRate")||0),dateFormat:String(fd.get("dateFormat")||"local"),updatedAt:serverTimestamp()};
+ try{await setDoc(userDoc(),{uid:state.user.uid,email:state.user.email||"",name:state.profile?.name||state.user.displayName||"NEXORA User",role:state.profile?.role||"user",plan:state.profile?.plan||"free",...patch},{merge:true});state.settings={...state.settings,...patch};state.profile={...state.profile,...patch};notify("Business preferences saved.");renderPage()}catch(err){notify(friendlyError(err),true)}
 }
-
-function installUI() {
-  document.body.innerHTML = `
-    <div id="nxApp">
-      <section id="nxAuth" class="nx-auth">
-        <div class="nx-auth-art">
-          <div class="nx-brand"><span class="nx-logo">N</span> NEXORA</div>
-          <div class="nx-hero-copy">
-            <span class="nx-eyebrow">YOUR BUSINESS. ONE PLATFORM.</span>
-            <h1>Make every<br><span>move count.</span></h1>
-            <p>Manage your finances, customers, inventory and work in one clear workspace.</p>
-            <div class="nx-hero-pills"><span>Finance</span><span>Operations</span><span>Growth</span></div>
-          </div>
-          <div class="nx-orbit nx-orbit-a"></div><div class="nx-orbit nx-orbit-b"></div>
-          <div class="nx-art-foot">NEXORA · BUSINESS COMMAND CENTER</div>
-        </div>
-        <div class="nx-auth-panel">
-          <div class="nx-auth-mobile-brand"><span class="nx-logo">N</span> NEXORA</div>
-          <div class="nx-auth-card">
-            <span class="nx-eyebrow" id="nxAuthEyebrow">WELCOME BACK</span>
-            <h2 id="nxAuthTitle">Sign in to NEXORA</h2>
-            <p id="nxAuthSubtitle" class="nx-muted">Your business workspace is waiting.</p>
-            <form id="nxAuthForm">
-              <div id="nxNameWrap" class="nx-field nx-hidden">
-                <label for="nxName">Full name</label>
-                <input id="nxName" autocomplete="name" placeholder="Your name">
-              </div>
-              <div class="nx-field">
-                <label for="nxEmail">Email address</label>
-                <input id="nxEmail" type="email" autocomplete="email" required placeholder="you@company.com">
-              </div>
-              <div class="nx-field">
-                <label for="nxPassword">Password</label>
-                <input id="nxPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="At least 6 characters">
-              </div>
-              <div id="nxAuthMessage" class="nx-auth-message" role="status"></div>
-              <button id="nxAuthSubmit" class="nx-btn nx-primary nx-wide" type="submit">Sign in</button>
-            </form>
-            <button id="nxGoogle" class="nx-btn nx-google nx-wide" type="button">Continue with Google</button>
-            <div class="nx-auth-links">
-              <button id="nxForgot" class="nx-link" type="button">Forgot password?</button>
-              <span id="nxSwitchText">New to NEXORA?</span>
-              <button id="nxSwitch" class="nx-link" type="button">Create account</button>
-            </div>
-            <p class="nx-terms">By continuing, you agree to use this platform responsibly.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="nxWorkspace" class="nx-layout nx-hidden">
-        <aside id="nxSidebar" class="nx-sidebar">
-          <div class="nx-brand"><span class="nx-logo">N</span><span>NEXORA</span></div>
-          <button id="nxWorkspaceButton" class="nx-workspace-switch">
-            <span class="nx-workspace-avatar">B</span>
-            <span class="nx-workspace-label"><b id="nxWorkspaceName">My Business</b><small>Business workspace</small></span>
-            <span>⌄</span>
-          </button>
-          <div id="nxWorkspaceMenu" class="nx-workspace-menu nx-hidden">
-            <div id="nxWorkspaceList"></div>
-            <button id="nxAddWorkspace" class="nx-menu-add">＋ Create workspace</button>
-          </div>
-          <div class="nx-nav-label">WORKSPACE</div>
-          <nav id="nxNav"></nav>
-          <div class="nx-sidebar-bottom">
-            <div class="nx-plan-card"><span class="nx-plan-dot"></span><div><b>Free plan</b><small>Core business tools</small></div></div>
-            <button id="nxSidebarProfile" class="nx-user-button">
-              <span id="nxAvatar" class="nx-avatar">U</span>
-              <span class="nx-user-info"><b id="nxUserName">Account</b><small id="nxUserEmail"></small></span>
-              <span>⋯</span>
-            </button>
-          </div>
-        </aside>
-
-        <main class="nx-main">
-          <header class="nx-topbar">
-            <button id="nxMobileMenu" class="nx-icon-btn" aria-label="Open navigation">☰</button>
-            <div class="nx-breadcrumb"><span>Workspace</span><span>/</span><b id="nxCrumb">Dashboard</b></div>
-            <div class="nx-top-actions">
-              <div class="nx-search"><span>⌕</span><input id="nxSearch" placeholder="Search this workspace..." aria-label="Search workspace"><kbd>Enter</kbd></div>
-              <button id="nxAlerts" class="nx-icon-btn" title="Notifications">♧</button>
-              <button id="nxTopAvatar" class="nx-avatar">U</button>
-            </div>
-          </header>
-          <div id="nxSearchResults" class="nx-search-results nx-hidden"></div>
-          <section id="nxContent" class="nx-content"></section>
-          <footer class="nx-footer"><span>© ${new Date().getFullYear()} NEXORA</span><span>One Platform. Every Profession.</span><span>Version ${VERSION}</span></footer>
-        </main>
-      </section>
-      <div id="nxToast" class="nx-toast" role="status"></div>
-      <div id="nxModalRoot"></div>
-    </div>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-      :root{color-scheme:dark;--bg:#080b16;--panel:#101629;--panel2:#131c31;--line:#202b43;--text:#f2f5ff;--muted:#8e9ab5;--blue:#5794ff;--purple:#a47aff;--cyan:#45d6e8;--green:#49d9a0;--red:#ff718b;--radius:17px}
-      *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.nx-hidden{display:none!important}#nxApp{min-height:100vh;background:radial-gradient(ellipse at 70% -15%,#18244a 0,transparent 42%),var(--bg);font-size:14px}
-      .nx-auth{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr}.nx-auth-art{position:relative;overflow:hidden;padding:42px 7%;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(145deg,#101a37,#111329 65%,#1a1534)}.nx-brand{display:flex;align-items:center;gap:11px;font-family:Manrope,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;position:relative;z-index:2}.nx-logo{width:35px;height:35px;display:inline-grid;place-items:center;border-radius:12px;background:linear-gradient(135deg,var(--blue),var(--purple));color:white;font-weight:800;box-shadow:0 5px 24px #5794ff45}.nx-hero-copy{max-width:530px;position:relative;z-index:2;margin:45px 0}.nx-eyebrow{color:#8daeff;font-size:10px;font-weight:700;letter-spacing:2px}.nx-hero-copy h1{font:800 clamp(44px,5.4vw,76px)/1.08 Manrope,sans-serif;margin:20px 0}.nx-hero-copy h1 span{background:linear-gradient(90deg,#6da5ff,#b69aff,#56dce8);color:transparent;background-clip:text}.nx-hero-copy p{color:#a6b2ce;line-height:1.8;max-width:390px;font-size:15px}.nx-hero-pills{display:flex;gap:9px;margin-top:28px;flex-wrap:wrap}.nx-hero-pills span{border:1px solid #ffffff1c;padding:9px 14px;border-radius:40px;background:#ffffff08;color:#cbd6f1}.nx-art-foot{font-size:10px;color:#7786a7;letter-spacing:2px;z-index:2}.nx-orbit{position:absolute;border:1px solid #7c91ff20;border-radius:50%;width:430px;height:430px;right:-80px;top:23%;box-shadow:0 0 100px #6d74ff0a,inset 0 0 90px #6d74ff0b}.nx-orbit-b{width:280px;height:280px;right:-5px;top:33%;border-color:#63d6ff20}.nx-auth-panel{display:grid;place-items:center;padding:35px 25px}.nx-auth-card{width:min(100%,410px)}.nx-auth-card h2{font:800 30px Manrope,sans-serif;margin:13px 0 8px}.nx-muted{color:var(--muted);line-height:1.6}.nx-field{display:grid;gap:8px;margin:20px 0}.nx-field label{color:#c9d2e8;font-size:12px;font-weight:600}.nx-field input,.nx-field select,.nx-field textarea,.nx-search input{width:100%;background:#0b1020;border:1px solid #29344e;color:var(--text);padding:13px 14px;border-radius:10px;outline:none;min-width:0}.nx-field input:focus,.nx-field select:focus,.nx-field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #5794ff18}.nx-btn{border:1px solid var(--line);background:#18213a;color:var(--text);padding:12px 16px;border-radius:10px;font-weight:700;transition:.2s}.nx-btn:hover{filter:brightness(1.13);transform:translateY(-1px)}.nx-primary{background:linear-gradient(100deg,#387ef2,#765de8);border:0}.nx-wide{width:100%;margin-top:9px}.nx-google{background:#11182b}.nx-auth-links{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:23px;color:var(--muted);font-size:12px}.nx-link{border:0;background:none;color:#83aaff;padding:2px;font-size:12px}.nx-terms{color:#65718e;text-align:center;font-size:10px;margin-top:28px}.nx-auth-message{color:var(--red);font-size:12px;line-height:1.6}.nx-auth-mobile-brand{display:none}
-      .nx-layout{display:flex;min-height:100vh}.nx-sidebar{width:248px;flex-shrink:0;border-right:1px solid #1c263b;background:#0b1020;padding:24px 15px 14px;display:flex;flex-direction:column;position:relative;z-index:10}.nx-sidebar>.nx-brand{padding:0 10px 28px}.nx-workspace-switch{width:100%;display:flex;align-items:center;gap:10px;padding:10px;background:#131c30;border:1px solid #27324a;border-radius:12px;color:var(--text);text-align:left}.nx-workspace-avatar{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#2c8df5,#8866ef);font-weight:800}.nx-workspace-label{flex:1;min-width:0}.nx-workspace-label b,.nx-workspace-label small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nx-workspace-label b{font-size:12px}.nx-workspace-label small{font-size:10px;color:var(--muted);margin-top:4px}.nx-workspace-menu{margin:6px 0 8px;padding:7px;background:#111a2d;border:1px solid var(--line);border-radius:12px}.nx-workspace-option,.nx-menu-add{width:100%;border:0;background:transparent;color:#cdd7ef;text-align:left;padding:10px;border-radius:8px;font-size:12px}.nx-workspace-option:hover,.nx-menu-add:hover{background:#202c47}.nx-workspace-option.active{color:#8eb3ff;background:#1a2a4a}.nx-nav-label{font-size:9px;letter-spacing:1.8px;color:#64718e;font-weight:700;margin:27px 11px 11px}#nxNav{display:grid;gap:4px}.nx-nav-item{border:0;background:transparent;color:#8e9ab5;display:flex;gap:12px;align-items:center;padding:11px 12px;text-align:left;border-radius:10px;font-size:12px;width:100%}.nx-nav-item:hover{background:#141e34;color:#eaf0ff}.nx-nav-item.active{background:linear-gradient(100deg,#1a2d50,#1b2240);color:#9dbdff;box-shadow:inset 2px 0 #5794ff}.nx-icon{display:inline-grid;place-items:center;width:20px;font-size:16px}.nx-sidebar-bottom{margin-top:auto;padding-top:20px}.nx-plan-card{display:flex;gap:10px;align-items:center;padding:12px;background:#111a2c;border:1px solid #222d45;border-radius:11px;margin-bottom:14px}.nx-plan-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px #49d9a066}.nx-plan-card b,.nx-plan-card small{display:block}.nx-plan-card b{font-size:11px}.nx-plan-card small{font-size:10px;color:var(--muted);margin-top:3px}.nx-user-button{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;text-align:left;color:var(--text);padding:8px 3px}.nx-avatar{width:32px;height:32px;display:grid;place-items:center;border:1px solid #34435f;border-radius:50%;background:#1a2944;color:#a9c4ff;font-weight:700}.nx-user-info{flex:1;min-width:0}.nx-user-info b,.nx-user-info small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nx-user-info b{font-size:11px}.nx-user-info small{font-size:10px;color:var(--muted);margin-top:4px}
-      .nx-main{min-width:0;flex:1;display:flex;flex-direction:column}.nx-topbar{height:76px;border-bottom:1px solid #1c263b;display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:15px;background:#0a0e1bd9;position:sticky;top:0;z-index:5;backdrop-filter:blur(15px)}.nx-breadcrumb{display:flex;gap:11px;align-items:center;color:#71809e;font-size:12px}.nx-breadcrumb b{color:#e4eaff;font-weight:600}.nx-top-actions{display:flex;gap:10px;align-items:center}.nx-search{display:flex;gap:8px;align-items:center;background:#10182a;border:1px solid #24304a;padding:0 10px;border-radius:10px;width:min(32vw,300px);color:#91a0bf}.nx-search input{border:0;background:transparent;padding:10px 0;font-size:11px}.nx-search kbd{font-size:9px;border:1px solid #35415a;border-radius:4px;padding:3px;color:#7584a3;white-space:nowrap}.nx-icon-btn{width:36px;height:36px;display:grid;place-items:center;border:1px solid #25314b;background:#11192b;border-radius:10px;color:#c7d3ee}.nx-content{padding:30px;flex:1;width:100%;max-width:1600px;margin:0 auto}.nx-footer{display:flex;justify-content:space-between;gap:10px;color:#5e6a86;font-size:10px;padding:16px 30px;border-top:1px solid #1b2438}.nx-page-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:25px;flex-wrap:wrap}.nx-page-head h1{font:800 27px Manrope,sans-serif;margin:0 0 8px}.nx-page-head p{color:var(--muted);margin:0;line-height:1.6;font-size:12px}.nx-head-actions{display:flex;gap:9px;flex-wrap:wrap}.nx-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin-bottom:20px}.nx-card{min-width:0;background:linear-gradient(145deg,#121a2d,#0f1526);border:1px solid #222e47;border-radius:var(--radius);padding:19px;box-shadow:0 8px 30px #0000000b}.nx-stat-top{display:flex;justify-content:space-between;align-items:center;gap:8px}.nx-stat-label{font-size:11px;color:#9aa7c3}.nx-stat-icon{width:35px;height:35px;display:grid;place-items:center;border-radius:11px;background:#20345b;color:#8eb6ff}.nx-stat-value{font:800 25px Manrope,sans-serif;margin:17px 0 7px;overflow-wrap:anywhere}.nx-stat-note{font-size:10px;color:#7383a2}.nx-positive{color:var(--green)}.nx-negative{color:var(--red)}.nx-section-title{font:700 15px Manrope,sans-serif;margin:0}.nx-section-sub{font-size:11px;color:var(--muted);margin-top:6px}.nx-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}.nx-two-col{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;margin-bottom:18px}.nx-chart{height:220px;display:flex;align-items:flex-end;gap:9px;padding:16px 4px 0;border-bottom:1px solid #27334b}.nx-chart-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:8px;min-width:0}.nx-chart-bar{width:min(28px,70%);min-height:3px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,#8a7cff,#478df7);box-shadow:0 0 16px #5794ff1b}.nx-chart-label{font-size:9px;color:#7785a1}.nx-empty{padding:35px 15px;text-align:center;color:#8190ae;font-size:12px;line-height:1.7}.nx-empty strong{display:block;color:#d6dff4;font-size:13px;margin-bottom:7px}.nx-table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:580px}th{text-align:left;color:#7f8dac;font-size:10px;font-weight:600;padding:12px 10px;border-bottom:1px solid #273149;white-space:nowrap}td{font-size:11px;padding:14px 10px;border-bottom:1px solid #202a40;color:#d4def2;vertical-align:middle}tbody tr:hover{background:#ffffff03}.nx-status{display:inline-flex;padding:5px 8px;border-radius:30px;background:#1b2b48;color:#9abaff;font-size:9px;white-space:nowrap}.nx-status.done,.nx-status.paid,.nx-status.completed{background:#15392f;color:#67e1b0}.nx-status.overdue,.nx-status.cancelled,.nx-status.low{background:#421f31;color:#ff94aa}.nx-status.pending,.nx-status.in-progress{background:#3b3020;color:#f0c783}.nx-table-actions{display:flex;gap:6px}.nx-small-btn{padding:6px 9px;border:1px solid #2a3854;background:#151e32;border-radius:7px;color:#c3d2f3;font-size:10px}.nx-danger{color:#ff92a7}.nx-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:17px}.nx-toolbar input,.nx-toolbar select{background:#0e1526;border:1px solid #29354e;border-radius:9px;padding:10px 12px;color:#dce6fa;font-size:11px;min-width:140px}.nx-toolbar input{flex:1}.nx-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}.nx-modal-backdrop{position:fixed;inset:0;background:#030610c9;z-index:100;display:grid;place-items:center;padding:18px;backdrop-filter:blur(8px)}.nx-modal{width:min(100%,570px);max-height:90vh;overflow:auto;background:#11192b;border:1px solid #33405c;border-radius:18px;padding:24px;box-shadow:0 25px 90px #0009}.nx-modal h2{font:800 21px Manrope,sans-serif;margin:0 0 7px}.nx-modal p{color:var(--muted);font-size:12px;line-height:1.6}.nx-modal-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.nx-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:15px}.nx-toast{position:fixed;right:22px;bottom:22px;z-index:200;max-width:min(420px,calc(100vw - 35px));padding:13px 18px;border:1px solid #344663;background:#15213a;color:#dce8ff;border-radius:12px;box-shadow:0 12px 40px #0007;opacity:0;pointer-events:none;transform:translateY(10px);transition:.2s;font-size:12px}.nx-toast.show{opacity:1;transform:translateY(0)}.nx-toast[data-type=error]{border-color:#81374d;color:#ffb1bf}.nx-search-results{position:fixed;z-index:50;right:110px;top:65px;width:min(400px,calc(100vw - 30px));background:#121b2e;border:1px solid #2a3853;border-radius:13px;padding:8px;box-shadow:0 18px 55px #0008;max-height:65vh;overflow:auto}.nx-search-result{display:block;padding:11px;border-radius:8px;color:#e1eaff;text-align:left;border:0;background:transparent;width:100%;font-size:12px}.nx-search-result:hover{background:#202d48}.nx-search-result small{display:block;color:#8292b1;margin-top:4px}.nx-notification{padding:13px 0;border-bottom:1px solid #25314a;font-size:12px}.nx-notification small{display:block;color:var(--muted);margin-top:5px}.nx-mobile-menu{display:none}.nx-auth-mobile-brand{align-items:center;gap:10px;font-weight:800;letter-spacing:2px}
-      @media(max-width:1100px){.nx-sidebar{width:220px}.nx-content{padding:23px}.nx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nx-two-col{grid-template-columns:1fr}.nx-search{width:220px}}
-      @media(max-width:760px){.nx-auth{grid-template-columns:1fr}.nx-auth-art{display:none}.nx-auth-panel{padding:26px 20px}.nx-auth-mobile-brand{display:flex;margin-bottom:45px}.nx-auth-card h2{font-size:26px}.nx-sidebar{position:fixed;left:-270px;top:0;bottom:0;width:250px;transition:left .25s;box-shadow:none}.nx-sidebar.open{left:0;box-shadow:20px 0 70px #0008}.nx-topbar{height:65px;padding:0 14px}.nx-mobile-menu{display:grid}.nx-breadcrumb{flex:1;gap:6px;font-size:10px}.nx-search{width:36px;height:36px;justify-content:center;padding:0}.nx-search input,.nx-search kbd{display:none}.nx-top-actions{gap:6px}.nx-content{padding:20px 14px}.nx-grid{gap:10px}.nx-card{padding:14px}.nx-stat-value{font-size:21px}.nx-page-head h1{font-size:23px}.nx-footer{padding:14px;flex-wrap:wrap}.nx-form-grid{grid-template-columns:1fr}.nx-search-results{right:12px;top:60px}.nx-two-col{gap:12px}}
-      @media(max-width:390px){.nx-grid{grid-template-columns:1fr 1fr}.nx-stat-value{font-size:18px}.nx-stat-label{font-size:10px}.nx-top-actions #nxAlerts{display:none}.nx-page-head h1{font-size:21px}}
-    </style>
-  `;
-
-  $("nxNav").innerHTML = menu.map(([id, ico, label]) =>
-    `<button class="nx-nav-item ${id === page ? "active" : ""}" data-page="${id}">${iconText(ico)}<span>${label}</span></button>`
-  ).join("");
-
-  $("nxAuthForm").addEventListener("submit", handleAuth);
-  $("nxSwitch").addEventListener("click", () => setAuthMode(authMode === "login" ? "register" : "login"));
-  $("nxGoogle").addEventListener("click", googleLogin);
-  $("nxForgot").addEventListener("click", resetPassword);
-  $("nxNav").addEventListener("click", e => {
-    const btn = e.target.closest("[data-page]");
-    if (btn) go(btn.dataset.page);
-  });
-  $("nxMobileMenu").addEventListener("click", () => $("nxSidebar").classList.toggle("open"));
-  $("nxWorkspaceButton").addEventListener("click", () => $("nxWorkspaceMenu").classList.toggle("nx-hidden"));
-  $("nxAddWorkspace").addEventListener("click", createWorkspace);
-  $("nxSidebarProfile").addEventListener("click", () => go("settings"));
-  $("nxTopAvatar").addEventListener("click", () => go("settings"));
-  $("nxAlerts").addEventListener("click", () => go("notifications"));
-  $("nxSearch").addEventListener("input", runSearch);
-  $("nxSearch").addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      const first = $("nxSearchResults").querySelector("[data-result-page]");
-      if (first) go(first.dataset.resultPage);
-    }
-    if (e.key === "Escape") $("nxSearchResults").classList.add("nx-hidden");
-  });
-  document.addEventListener("click", e => {
-    if (!e.target.closest(".nx-workspace-switch") && !e.target.closest(".nx-workspace-menu")) {
-      $("nxWorkspaceMenu").classList.add("nx-hidden");
-    }
-    if (!e.target.closest(".nx-search") && !e.target.closest(".nx-search-results")) {
-      $("nxSearchResults").classList.add("nx-hidden");
-    }
-  });
-  $("nxModalRoot").addEventListener("click", e => {
-    if (e.target.classList.contains("nx-modal-backdrop") || e.target.closest("[data-close-modal]")) closeModal();
-  });
+function exportBackup(){
+ const payload={app:"NEXORA",version:VERSION,exportedAt:new Date().toISOString(),workspace:state.workspaceId,settings:state.settings,records:Object.fromEntries(Object.entries(state.records).filter(([k])=>k!=="workspaces"))};
+ download(`nexora-backup-${isoToday()}.json`,JSON.stringify(payload,(k,v)=>v?.toDate?v.toDate().toISOString():v,2),"application/json");notify("JSON backup exported.");
 }
-
-let authMode = "login";
-
-function setAuthMode(mode) {
-  authMode = mode;
-  const registering = mode === "register";
-  $("nxAuthTitle").textContent = registering ? "Create your account" : "Sign in to NEXORA";
-  $("nxAuthEyebrow").textContent = registering ? "GET STARTED TODAY" : "WELCOME BACK";
-  $("nxAuthSubtitle").textContent = registering ? "Create your personal business workspace." : "Your business workspace is waiting.";
-  $("nxNameWrap").classList.toggle("nx-hidden", !registering);
-  $("nxName").required = registering;
-  $("nxAuthSubmit").textContent = registering ? "Create account" : "Sign in";
-  $("nxSwitchText").textContent = registering ? "Already have an account?" : "New to NEXORA?";
-  $("nxSwitch").textContent = registering ? "Sign in" : "Create account";
-  $("nxForgot").classList.toggle("nx-hidden", registering);
-  $("nxAuthMessage").textContent = "";
+function bindDynamicEvents(){
+ $("#pageContent").onclick=async e=>{
+  const btn=e.target.closest("button");if(!btn)return;
+  if(btn.dataset.add){openRecordModal(btn.dataset.add);return}
+  if(btn.dataset.edit){const [n,id]=btn.dataset.edit.split(":");openRecordModal(n,id);return}
+  if(btn.dataset.delete){const [n,id]=btn.dataset.delete.split(":");deleteRecord(n,id);return}
+  if(btn.dataset.export){exportCSV(btn.dataset.export);return}
+  if(btn.dataset.goto){navTo(btn.dataset.goto);return}
+  if(btn.dataset.switchWorkspace){state.workspaceId=btn.dataset.switchWorkspace;await loadAll();navTo("dashboard");notify("Workspace switched.");return}
+  if(btn.id==="runImport"){importCSV();return}
+ };
+ $("#pageContent").oninput=e=>{if(e.target.id==="moduleSearch"){state.search=e.target.value;const pos=e.target.selectionStart;renderPage();const input=$("#moduleSearch");if(input){input.focus();input.setSelectionRange(pos,pos)}}};
+ $("#pageContent").onsubmit=e=>{if(e.target.id==="settingsForm")saveSettings(e)};
+ $("#pageContent").onclick=async e=>{
+  const btn=e.target.closest("button");if(!btn)return;
+  if(btn.dataset.add){openRecordModal(btn.dataset.add);return}
+  if(btn.dataset.edit){const [n,id]=btn.dataset.edit.split(":");openRecordModal(n,id);return}
+  if(btn.dataset.delete){const [n,id]=btn.dataset.delete.split(":");deleteRecord(n,id);return}
+  if(btn.dataset.export){exportCSV(btn.dataset.export);return}
+  if(btn.dataset.goto){navTo(btn.dataset.goto);return}
+  if(btn.dataset.switchWorkspace){state.workspaceId=btn.dataset.switchWorkspace;await loadAll();navTo("dashboard");notify("Workspace switched.");return}
+  if(btn.id==="runImport"){importCSV();return}
+  if(btn.id==="exportBackup")exportBackup();
+ };
 }
-
-function authError(error) {
-  const map = {
-    "auth/email-already-in-use": "This email already has an account. Please sign in.",
-    "auth/invalid-email": "Please enter a valid email address.",
-    "auth/weak-password": "Choose a password with at least 6 characters.",
-    "auth/invalid-credential": "Email or password is incorrect.",
-    "auth/user-not-found": "No account found for this email.",
-    "auth/wrong-password": "Email or password is incorrect.",
-    "auth/popup-closed-by-user": "The Google sign-in window was closed.",
-    "auth/too-many-requests": "Too many attempts. Please try again later.",
-    "auth/network-request-failed": "Network error. Check your internet connection."
-  };
-  return map[error.code] || error.message || "Something went wrong. Please try again.";
+function installAppEvents(){
+ $("#authForm").addEventListener("submit",handleAuth);
+ $("#showLogin").onclick=()=>setAuthMode("login");$("#showRegister").onclick=()=>setAuthMode("register");
+ $("#forgotPassword").onclick=async()=>{const email=$("#authEmail").value.trim();if(!email)return showAuthMessage("Enter your email address first.",true);try{await sendPasswordResetEmail(auth,email);showAuthMessage("Password reset email sent. Check your inbox.")}catch(e){showAuthMessage(friendlyError(e),true)}};
+ $("#signOutBtn").onclick=()=>signOut(auth);
+ $("#menuToggle").onclick=()=>$("#sidebar").classList.toggle("open");
+ $("#quickAddBtn").onclick=()=>openRecordModal(state.page in modules?state.page:"transactions");
+ $("#workspaceSelect").onchange=async e=>{state.workspaceId=e.target.value;await loadAll();navTo("dashboard")};
+ $("#globalSearch").oninput=e=>{state.search=e.target.value;if(modules[state.page])renderPage()};
+ $("#mainNav").onclick=e=>{const b=e.target.closest("[data-page]");if(b)navTo(b.dataset.page)};
+ $$(".sidebar [data-page]").forEach(b=>b.addEventListener("click",()=>navTo(b.dataset.page)));
+ $("#pageContent").addEventListener("click",e=>{if(e.target.id==="exportBackup")exportBackup()});
 }
-
-async function handleAuth(event) {
-  event.preventDefault();
-  const email = $("nxEmail").value.trim();
-  const password = $("nxPassword").value;
-  const name = $("nxName").value.trim();
-  const button = $("nxAuthSubmit");
-  button.disabled = true;
-  $("nxAuthMessage").textContent = "Please wait…";
-
-  try {
-    if (authMode === "register") {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      if (name) await updateProfile(result.user, { displayName: name });
-      await ensureUserProfile(result.user, name);
-    } else {
-      await signInWithEmailAndPassword(auth, email, password);
-    }
-  } catch (error) {
-    $("nxAuthMessage").textContent = authError(error);
-  } finally {
-    button.disabled = false;
-  }
+async function showApp(){
+ $("#authView").classList.add("hidden");$("#appView").classList.remove("hidden");
+ $("#userName").textContent=state.profile?.name||"NEXORA User";$("#userEmail").textContent=state.user.email||"";$("#userAvatar").textContent=(state.profile?.name||state.user.email||"N").charAt(0).toUpperCase();
+ await loadAll();navTo("dashboard");
 }
-
-async function googleLogin() {
-  $("nxAuthMessage").textContent = "Opening Google sign-in…";
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    await ensureUserProfile(result.user, result.user.displayName || "");
-  } catch (error) {
-    $("nxAuthMessage").textContent = authError(error);
-  }
-}
-
-async function resetPassword() {
-  const email = $("nxEmail").value.trim();
-  if (!email) {
-    $("nxAuthMessage").textContent = "Enter your email address first.";
-    $("nxEmail").focus();
-    return;
-  }
-  try {
-    await sendPasswordResetEmail(auth, email);
-    $("nxAuthMessage").textContent = "Password reset email sent. Check your inbox.";
-  } catch (error) {
-    $("nxAuthMessage").textContent = authError(error);
-  }
-}
-
-async function ensureUserProfile(firebaseUser, displayName = "") {
-  const ref = doc(db, "users", firebaseUser.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      uid: firebaseUser.uid,
-      name: displayName || firebaseUser.email?.split("@")[0] || "User",
-      email: firebaseUser.email || "",
-      role: "user",
-      plan: "free",
-      businessName: "",
-      profession: "General Business",
-      currency: "PKR",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-  }
-}
-
-function userCollection(name) {
-  return collection(db, "users", user.uid, name);
-}
-
-function recordBelongsHere(record) {
-  return (record.workspaceId || "default") === workspaceId;
-}
-
-async function getRecords(name) {
-  const snapshot = await getDocs(userCollection(name));
-  return snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(recordBelongsHere);
-}
-
-async function saveRecord(name, data, id = null) {
-  const payload = {
-    ...data,
-    workspaceId,
-    updatedAt: serverTimestamp()
-  };
-  if (id) {
-    await updateDoc(doc(db, "users", user.uid, name, id), payload);
-    return id;
-  }
-  payload.createdAt = serverTimestamp();
-  const ref = await addDoc(userCollection(name), payload);
-  return ref.id;
-}
-
-async function removeRecord(name, id) {
-  await deleteDoc(doc(db, "users", user.uid, name, id));
-}
-
-async function loadWorkspaceList() {
-  const list = await getRecords("workspaces");
-  if (!list.some(w => w.id === "default")) {
-    list.unshift({ id: "default", name: profile.businessName || "My Business" });
-  }
-  const saved = list.find(w => w.id === workspaceId);
-  workspaceName = saved?.name || "My Business";
-  $("nxWorkspaceName").textContent = workspaceName;
-  $("nxWorkspaceList").innerHTML = list.map(w => `
-    <button class="nx-workspace-option ${w.id === workspaceId ? "active" : ""}" data-workspace="${esc(w.id)}">
-      ${esc(w.name || "My Business")} ${w.id === workspaceId ? "✓" : ""}
-    </button>`).join("");
-
-  $("nxWorkspaceList").onclick = async e => {
-    const btn = e.target.closest("[data-workspace]");
-    if (!btn) return;
-    workspaceId = btn.dataset.workspace;
-    workspaceName = list.find(w => w.id === workspaceId)?.name || "My Business";
-    $("nxWorkspaceMenu").classList.add("nx-hidden");
-    await loadRecords();
-    render();
-    await loadWorkspaceList();
-  };
-}
-
-async function createWorkspace() {
-  const name = prompt("Enter a name for the new workspace:");
-  if (!name?.trim()) return;
-  try {
-    const ref = await addDoc(userCollection("workspaces"), {
-      name: name.trim(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    workspaceId = ref.id;
-    workspaceName = name.trim();
-    await loadRecords();
-    await loadWorkspaceList();
-    render();
-    notify("Workspace created.");
-  } catch (error) {
-    notify(authError(error), "error");
-  }
-}
-
-async function loadRecords() {
-  const names = [...Object.keys(modules), "workspaces", "categories", "notifications"];
-  const results = await Promise.all(names.map(async name => {
-    try { return [name, await getRecords(name)]; }
-    catch (error) { console.error("Load failed:", name, error); return [name, []]; }
-  }));
-  records = Object.fromEntries(results);
-}
-
-async function loadAccount(firebaseUser) {
-  user = firebaseUser;
-  await ensureUserProfile(user, user.displayName || "");
-  const snap = await getDoc(doc(db, "users", user.uid));
-  profile = snap.exists() ? snap.data() : {};
-  if (!profile.name && user.displayName) profile.name = user.displayName;
-
-  workspaceId = "default";
-  workspaceName = profile.businessName || "My Business";
-  $("nxAuth").classList.add("nx-hidden");
-  $("nxWorkspace").classList.remove("nx-hidden");
-  $("nxUserName").textContent = profile.name || user.displayName || "Account";
-  $("nxUserEmail").textContent = user.email || "";
-  $("nxAvatar").textContent = ($("nxUserName").textContent[0] || "U").toUpperCase();
-  $("nxTopAvatar").textContent = $("nxAvatar").textContent;
-  $("nxWorkspaceName").textContent = workspaceName;
-  await loadRecords();
-  await loadWorkspaceList();
-  render();
-}
-
-function go(nextPage) {
-  page = nextPage;
-  $("nxSidebar").classList.remove("open");
-  $("nxSearchResults").classList.add("nx-hidden");
-  render();
-  document.querySelectorAll(".nx-nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.page === page));
-}
-
-function pageHead(title, subtitle, action = "") {
-  return `<div class="nx-page-head"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="nx-head-actions">${action}</div></div>`;
-}
-
-function button(label, action, style = "") {
-  return `<button class="nx-btn ${style}" data-action="${esc(action)}">${label}</button>`;
-}
-
-function stat(label, value, ico, note = "") {
-  return `<article class="nx-card"><div class="nx-stat-top"><span class="nx-stat-label">${esc(label)}</span><span class="nx-stat-icon">${ico}</span></div><div class="nx-stat-value">${value}</div><div class="nx-stat-note">${note}</div></article>`;
-}
-
-function getNum(item, ...keys) {
-  for (const key of keys) if (item[key] != null && item[key] !== "") return Number(item[key]) || 0;
-  return 0;
-}
-
-function txTotals() {
-  const tx = records.transactions || [];
-  const income = tx.filter(x => x.type === "income").reduce((s, x) => s + getNum(x, "amount"), 0);
-  const expense = tx.filter(x => x.type === "expense").reduce((s, x) => s + getNum(x, "amount"), 0);
-  return { income, expense, profit: income - expense };
-}
-
-function statusPill(status = "pending") {
-  const normalized = String(status).toLowerCase().replace(/_/g, "-");
-  return `<span class="nx-status ${esc(normalized)}">${esc(status.replace(/_/g, " "))}</span>`;
-}
-
-function emptyState(title, message) {
-  return `<div class="nx-empty"><strong>${esc(title)}</strong>${esc(message)}</div>`;
-}
-
-function table(headers, rows) {
-  if (!rows.length) return emptyState("Nothing here yet", "Create your first record to start building your workspace.");
-  return `<div class="nx-table-wrap"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
-}
-
-function chartCard() {
-  const tx = records.transactions || [];
-  const months = [];
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(1);
-    date.setMonth(date.getMonth() - i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    months.push({ key, label: date.toLocaleString("en", { month: "short" }), income: 0, expense: 0 });
-  }
-  tx.forEach(t => {
-    const key = String(t.date || t.createdAt?.toDate?.().toISOString?.() || "").slice(0, 7);
-    const m = months.find(x => x.key === key);
-    if (m) m[t.type === "expense" ? "expense" : "income"] += getNum(t, "amount");
-  });
-  const max = Math.max(1, ...months.flatMap(m => [m.income, m.expense]));
-  return `<article class="nx-card"><div class="nx-card-head"><div><h3 class="nx-section-title">Cash flow overview</h3><div class="nx-section-sub">Income and expenses · last 6 months</div></div><span class="nx-status">Live data</span></div>
-    <div class="nx-chart">${months.map(m => `<div class="nx-chart-col" title="${esc(m.label)}: ${esc(money(m.income))} income / ${esc(money(m.expense))} expenses">
-      <div style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;justify-content:center">
-        <div class="nx-chart-bar" style="height:${Math.max(2, m.income / max * 100)}%;background:linear-gradient(#54d9bc,#248d9b)"></div>
-        <div class="nx-chart-bar" style="height:${Math.max(2, m.expense / max * 100)}%;background:linear-gradient(#b18cff,#6753d9)"></div>
-      </div><span class="nx-chart-label">${esc(m.label)}</span></div>`).join("")}</div>
-    <div class="nx-section-sub" style="margin-top:13px">● Income &nbsp; <span style="color:#b18cff">● Expenses</span></div>
-  </article>`;
-}
-
-function dashboardPage() {
-  const totals = txTotals();
-  const customers = records.customers || [];
-  const projects = records.projects || [];
-  const inventory = records.inventory || [];
-  const low = inventory.filter(x => getNum(x, "quantity", "stock") <= getNum(x, "minStock") && getNum(x, "minStock") > 0);
-  const recent = [...(records.transactions || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
-  const recentRows = recent.map(t => `<tr><td>${esc(t.description || t.title || "Transaction")}</td><td>${esc(t.date || "—")}</td><td>${statusPill(t.type || "income")}</td><td class="${t.type === "expense" ? "nx-negative" : "nx-positive"}">${t.type === "expense" ? "−" : "+"}${esc(money(t.amount))}</td></tr>`);
-  const greetings = profile.name ? `Welcome back, ${profile.name}. Here's what's happening with your business.` : "Here's what's happening with your business today.";
-  return `${pageHead("Business overview", greetings, button("＋ Add transaction", "new:transactions", "nx-primary"))}
-    <div class="nx-grid">
-      ${stat("Total income", money(totals.income), "↗", "Recorded income")}
-      ${stat("Total expenses", money(totals.expense), "↘", "Recorded expenses")}
-      ${stat("Net balance", money(totals.profit), "◈", totals.profit >= 0 ? '<span class="nx-positive">Positive balance</span>' : '<span class="nx-negative">Expenses exceed income</span>')}
-      ${stat("Customers", customers.length, "♙", `${projects.length} projects · ${inventory.length} inventory items`)}
-    </div>
-    <div class="nx-two-col">${chartCard()}
-      <article class="nx-card"><div class="nx-card-head"><div><h3 class="nx-section-title">Quick actions</h3><div class="nx-section-sub">Shortcuts to common tasks</div></div></div>
-        <div class="nx-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:0;gap:9px">
-          <button class="nx-btn" data-action="new:transactions">＋ Transaction</button>
-          <button class="nx-btn" data-action="new:customers">＋ Customer</button>
-          <button class="nx-btn" data-action="new:inventory">＋ Inventory item</button>
-          <button class="nx-btn" data-action="new:tasks">＋ Task</button>
-          <button class="nx-btn" data-action="new:invoices">＋ Invoice</button>
-          <button class="nx-btn" data-page="reports">▥ View reports</button>
-        </div>
-        <div style="margin-top:18px;padding:14px;border-radius:12px;background:#101d30;border:1px solid #24334b"><div class="nx-stat-label">Inventory attention</div><div style="font:700 20px Manrope;margin-top:8px">${low.length} low-stock item${low.length === 1 ? "" : "s"}</div><div class="nx-section-sub">Based on the minimum stock levels you set.</div></div>
-      </article>
-    </div>
-    <article class="nx-card"><div class="nx-card-head"><div><h3 class="nx-section-title">Recent transactions</h3><div class="nx-section-sub">Latest financial activity</div></div>${button("View all", "page:transactions")}</div>
-      ${table(["Description","Date","Type","Amount"], recentRows)}
-    </article>`;
-}
-
-const fields = {
-  transactions: [
-    ["description", "Description", "text", true],
-    ["type", "Type", "select", true, ["income", "expense"]],
-    ["amount", "Amount", "number", true],
-    ["date", "Date", "date", true],
-    ["category", "Category", "text", false],
-    ["reference", "Reference / note", "text", false]
-  ],
-  customers: [
-    ["name", "Customer name", "text", true],
-    ["email", "Email", "email", false],
-    ["phone", "Phone", "tel", false],
-    ["company", "Company", "text", false],
-    ["address", "Address", "text", false],
-    ["notes", "Notes", "textarea", false]
-  ],
-  suppliers: [
-    ["name", "Supplier name", "text", true],
-    ["email", "Email", "email", false],
-    ["phone", "Phone", "tel", false],
-    ["company", "Company", "text", false],
-    ["address", "Address", "text", false]
-  ],
-  inventory: [
-    ["name", "Item name", "text", true],
-    ["sku", "SKU / barcode", "text", false],
-    ["category", "Category", "text", false],
-    ["quantity", "Quantity in stock", "number", true],
-    ["minStock", "Minimum stock alert", "number", false],
-    ["cost", "Unit cost", "number", false],
-    ["price", "Selling price", "number", false],
-    ["expiry", "Expiry date", "date", false]
-  ],
-  projects: [
-    ["name", "Project name", "text", true],
-    ["client", "Client", "text", false],
-    ["deadline", "Deadline", "date", false],
-    ["budget", "Budget", "number", false],
-    ["status", "Status", "select", true, ["planned", "in_progress", "completed", "on_hold"]],
-    ["description", "Description", "textarea", false]
-  ],
-  tasks: [
-    ["title", "Task title", "text", true],
-    ["assignedTo", "Assigned to", "text", false],
-    ["dueDate", "Due date", "date", false],
-    ["priority", "Priority", "select", true, ["low", "medium", "high"]],
-    ["status", "Status", "select", true, ["pending", "in_progress", "completed"]],
-    ["description", "Description", "textarea", false]
-  ],
-  invoices: [
-    ["invoiceNo", "Invoice number", "text", true],
-    ["customer", "Customer", "text", true],
-    ["date", "Invoice date", "date", true],
-    ["dueDate", "Due date", "date", false],
-    ["amount", "Total amount", "number", true],
-    ["status", "Status", "select", true, ["draft", "sent", "paid", "overdue", "cancelled"]],
-    ["notes", "Notes", "textarea", false]
-  ],
-  bills: [
-    ["billNo", "Bill number", "text", true],
-    ["supplier", "Supplier", "text", true],
-    ["date", "Bill date", "date", true],
-    ["dueDate", "Due date", "date", false],
-    ["amount", "Total amount", "number", true],
-    ["status", "Status", "select", true, ["unpaid", "paid", "overdue"]],
-    ["notes", "Notes", "textarea", false]
-  ],
-  appointments: [
-    ["title", "Appointment title", "text", true],
-    ["contact", "Customer / contact", "text", false],
-    ["date", "Date", "date", true],
-    ["time", "Time", "time", false],
-    ["status", "Status", "select", true, ["scheduled", "completed", "cancelled"]],
-    ["notes", "Notes", "textarea", false]
-  ],
-  branches: [
-    ["name", "Branch name", "text", true],
-    ["manager", "Manager", "text", false],
-    ["phone", "Phone", "tel", false],
-    ["address", "Address", "text", false],
-    ["status", "Status", "select", true, ["active", "inactive"]]
-  ]
-};
-
-const labels = {
-  transactions: ["Transactions", "Track income, expenses and your business cash flow."],
-  customers: ["Customers", "Keep customer contacts and relationship details organized."],
-  suppliers: ["Suppliers", "Manage supplier contact information."],
-  inventory: ["Inventory", "Track quantities, prices, stock thresholds and expiry dates."],
-  projects: ["Projects", "Organize project budgets, deadlines and progress."],
-  tasks: ["Tasks", "Keep work, priorities and deadlines in one place."],
-  invoices: ["Invoices", "Track invoice amounts, due dates and payment status."],
-  bills: ["Bills & Payables", "Track supplier bills and due dates."],
-  appointments: ["Appointments", "Organize appointments and follow-ups."],
-  branches: ["Branches", "Maintain a directory of business branches."]
-};
-
-function fieldControl(f, value = "") {
-  const [key, label, type, required, options] = f;
-  const req = required ? "required" : "";
-  const val = esc(value ?? "");
-  if (type === "select") {
-    return `<div class="nx-field"><label for="f_${key}">${esc(label)}</label><select id="f_${key}" name="${key}" ${req}>${(options || []).map(o => `<option value="${esc(o)}" ${o === value ? "selected" : ""}>${esc(o.replace(/_/g, " "))}</option>`).join("")}</select></div>`;
-  }
-  if (type === "textarea") return `<div class="nx-field"><label for="f_${key}">${esc(label)}</label><textarea id="f_${key}" name="${key}" rows="3">${val}</textarea></div>`;
-  return `<div class="nx-field"><label for="f_${key}">${esc(label)}</label><input id="f_${key}" name="${key}" type="${type}" ${req} ${type === "number" ? 'step="any"' : ""} value="${val}" ${type === "date" && !value && key === "date" ? `value="${today()}"` : ""}></div>`;
-}
-
-function openModal(name, record = null) {
-  const defs = fields[name];
-  if (!defs) return;
-  const title = record ? "Edit record" : `Add ${labels[name][0].replace(/s$/, "")}`;
-  $("nxModalRoot").innerHTML = `<div class="nx-modal-backdrop"><div class="nx-modal" role="dialog" aria-modal="true">
-    <div class="nx-modal-head"><div><h2>${esc(title)}</h2><p>Changes are saved to your personal Firebase account.</p></div><button class="nx-icon-btn" data-close-modal aria-label="Close">×</button></div>
-    <form id="nxRecordForm"><div class="nx-form-grid">${defs.map(f => fieldControl(f, record?.[f[0]] ?? (f[0] === "date" ? today() : ""))).join("")}</div>
-      <div class="nx-modal-actions"><button type="button" class="nx-btn" data-close-modal>Cancel</button><button class="nx-btn nx-primary" type="submit">Save record</button></div>
-    </form></div></div>`;
-  $("nxRecordForm").onsubmit = async e => {
-    e.preventDefault();
-    const data = {};
-    for (const f of defs) {
-      const el = e.currentTarget.elements.namedItem(f[0]);
-      if (!el) continue;
-      data[f[0]] = f[2] === "number" ? (el.value === "" ? 0 : Number(el.value)) : el.value.trim();
-    }
-    try {
-      await saveRecord(name, data, record?.id || null);
-      closeModal();
-      await loadRecords();
-      render();
-      notify(record ? "Record updated." : "Record created.");
-    } catch (error) {
-      notify(authError(error), "error");
-    }
-  };
-}
-
-function closeModal() {
-  $("nxModalRoot").innerHTML = "";
-}
-
-function renderCollection(name) {
-  const [title, subtitle] = labels[name] || [name, ""];
-  const action = button("＋ Add new", `new:${name}`, "nx-primary") +
-    button("Export CSV", `export:${name}`);
-  const list = records[name] || [];
-  const rowCells = item => {
-    if (name === "transactions") return `<td>${esc(item.description || "—")}</td><td>${esc(item.date || "—")}</td><td>${statusPill(item.type)}</td><td>${esc(money(item.amount))}</td>`;
-    if (name === "customers" || name === "suppliers") return `<td><b>${esc(item.name || "—")}</b></td><td>${esc(item.company || "—")}</td><td>${esc(item.email || "—")}</td><td>${esc(item.phone || "—")}</td>`;
-    if (name === "inventory") {
-      const qty = getNum(item, "quantity", "stock");
-      const low = getNum(item, "minStock") > 0 && qty <= getNum(item, "minStock");
-      return `<td><b>${esc(item.name || "—")}</b><div class="nx-section-sub">${esc(item.sku || item.category || "")}</div></td><td>${qty}</td><td>${esc(money(item.cost))}</td><td>${esc(money(item.price))}</td><td>${low ? statusPill("low") : statusPill("available")}</td>`;
-    }
-    if (name === "projects") return `<td><b>${esc(item.name || "—")}</b></td><td>${esc(item.client || "—")}</td><td>${esc(item.deadline || "—")}</td><td>${esc(money(item.budget))}</td><td>${statusPill(item.status || "planned")}</td>`;
-    if (name === "tasks") return `<td><b>${esc(item.title || "—")}</b></td><td>${esc(item.assignedTo || "—")}</td><td>${esc(item.dueDate || "—")}</td><td>${statusPill(item.priority || "medium")}</td><td>${statusPill(item.status || "pending")}</td>`;
-    if (name === "invoices") return `<td><b>${esc(item.invoiceNo || "—")}</b></td><td>${esc(item.customer || "—")}</td><td>${esc(item.date || "—")}</td><td>${esc(item.dueDate || "—")}</td><td>${esc(money(item.amount))}</td><td>${statusPill(item.status || "draft")}</td>`;
-    if (name === "bills") return `<td><b>${esc(item.billNo || "—")}</b></td><td>${esc(item.supplier || "—")}</td><td>${esc(item.date || "—")}</td><td>${esc(item.dueDate || "—")}</td><td>${esc(money(item.amount))}</td><td>${statusPill(item.status || "unpaid")}</td>`;
-    if (name === "appointments") return `<td><b>${esc(item.title || "—")}</b></td><td>${esc(item.contact || "—")}</td><td>${esc(item.date || "—")} ${esc(item.time || "")}</td><td>${statusPill(item.status || "scheduled")}</td>`;
-    return `<td><b>${esc(item.name || "—")}</b></td><td>${esc(item.manager || "—")}</td><td>${esc(item.phone || "—")}</td><td>${esc(item.address || "—")}</td><td>${statusPill(item.status || "active")}</td>`;
-  };
-  const cols = {
-    transactions: ["Description", "Date", "Type", "Amount"],
-    customers: ["Customer", "Company", "Email", "Phone"],
-    suppliers: ["Supplier", "Company", "Email", "Phone"],
-    inventory: ["Item", "Quantity", "Unit cost", "Selling price", "Stock status"],
-    projects: ["Project", "Client", "Deadline", "Budget", "Status"],
-    tasks: ["Task", "Assigned to", "Due date", "Priority", "Status"],
-    invoices: ["Invoice", "Customer", "Date", "Due date", "Amount", "Status"],
-    bills: ["Bill", "Supplier", "Date", "Due date", "Amount", "Status"],
-    appointments: ["Appointment", "Contact", "Date & time", "Status"],
-    branches: ["Branch", "Manager", "Phone", "Address", "Status"]
-  }[name];
-  const rows = list.map(item => `<tr>${rowCells(item)}<td><div class="nx-table-actions"><button class="nx-small-btn" data-edit="${name}" data-id="${esc(item.id)}">Edit</button><button class="nx-small-btn nx-danger" data-delete="${name}" data-id="${esc(item.id)}">Delete</button></div></td></tr>`);
-  const totals = name === "transactions" ? `<div class="nx-grid" style="margin-bottom:16px">${stat("Income", money(txTotals().income), "↗")}${stat("Expenses", money(txTotals().expense), "↘")}${stat("Net balance", money(txTotals().profit), "◈")}${stat("Records", list.length, "▤")}</div>` : "";
-  return `${pageHead(title, subtitle, action)}${totals}
-    <div class="nx-toolbar"><input id="nxTableFilter" placeholder="Filter ${esc(title.toLowerCase())}..." aria-label="Filter records"><span class="nx-status">${list.length} record${list.length === 1 ? "" : "s"}</span></div>
-    <article class="nx-card"><div id="nxCollectionTable">${table([...cols, "Actions"], rows)}</div></article>`;
-}
-
-function reportsPage() {
-  const t = txTotals();
-  const tx = records.transactions || [];
-  const months = {};
-  tx.forEach(item => {
-    const key = String(item.date || "Undated").slice(0, 7);
-    if (!months[key]) months[key] = { income: 0, expense: 0, count: 0 };
-    months[key][item.type === "expense" ? "expense" : "income"] += getNum(item, "amount");
-    months[key].count++;
-  });
-  const rows = Object.keys(months).sort().reverse().map(m => `<tr><td>${esc(m)}</td><td>${esc(money(months[m].income))}</td><td>${esc(money(months[m].expense))}</td><td>${esc(money(months[m].income - months[m].expense))}</td><td>${months[m].count}</td></tr>`);
-  return `${pageHead("Reports & analytics", "Review your recorded financial activity and export data.", button("Export transactions", "export:transactions", "nx-primary"))}
-    <div class="nx-grid">${stat("Total income", money(t.income), "↗")}${stat("Total expenses", money(t.expense), "↘")}${stat("Net result", money(t.profit), "◈")}${stat("Transactions", tx.length, "▤")}</div>
-    <article class="nx-card"><div class="nx-card-head"><div><h3 class="nx-section-title">Monthly financial summary</h3><div class="nx-section-sub">Calculated from saved transactions</div></div><button class="nx-btn" data-action="import:transactions">Import CSV</button></div>
-      ${table(["Month","Income","Expenses","Net","Entries"], rows)}
-    </article>
-    <article class="nx-card" style="margin-top:16px"><h3 class="nx-section-title">Data tools</h3><p class="nx-muted">Export records for backup or use the CSV importer to add transaction rows. Review your exported file before sharing it.</p>
-      <div class="nx-head-actions">${Object.keys(modules).map(name => `<button class="nx-btn" data-action="export:${name}">Export ${esc(labels[name][0])}</button>`).join("")}</div>
-    </article>`;
-}
-
-function settingsPage() {
-  return `${pageHead("Business settings", "Manage your profile, business details and workspace preferences.")}
-    <div class="nx-two-col">
-      <article class="nx-card"><h3 class="nx-section-title">Business profile</h3><p class="nx-muted">These details are stored in your Firebase user profile.</p>
-        <form id="nxProfileForm">
-          <div class="nx-field"><label>Display name</label><input name="name" value="${esc(profile.name || user.displayName || "")}" required></div>
-          <div class="nx-field"><label>Business name</label><input name="businessName" value="${esc(profile.businessName || "")}" placeholder="Your business"></div>
-          <div class="nx-field"><label>Business type / profession</label><input name="profession" value="${esc(profile.profession || "General Business")}"></div>
-          <div class="nx-field"><label>Currency</label><select name="currency">${["PKR","USD","GBP","EUR","AED","SAR","INR","CAD","AUD"].map(c => `<option ${c === (profile.currency || "PKR") ? "selected" : ""}>${c}</option>`).join("")}</select></div>
-          <button class="nx-btn nx-primary" type="submit">Save settings</button>
-        </form>
-      </article>
-      <article class="nx-card"><h3 class="nx-section-title">Account & security</h3>
-        <div class="nx-notification"><b>Signed-in account</b><small>${esc(user.email || "")}</small></div>
-        <div class="nx-notification"><b>Subscription</b><small>${esc(profile.plan || "free")} plan. Online billing is not connected.</small></div>
-        <div class="nx-notification"><b>Data storage</b><small>Firebase Firestore · account-isolated records</small></div>
-        <div class="nx-notification"><b>App version</b><small>NEXORA ${VERSION}</small></div>
-        <button id="nxSignOut" class="nx-btn nx-danger" style="margin-top:15px">Sign out</button>
-      </article>
-    </div>
-    <article class="nx-card"><h3 class="nx-section-title">Workspace data</h3><p class="nx-muted">Each workspace filters records using its workspace ID. Your older records without a workspace ID remain in the default workspace.</p>
-      <div class="nx-head-actions"><button class="nx-btn" data-action="export:transactions">Export transactions</button><button class="nx-btn" data-action="export:customers">Export customers</button><button class="nx-btn" data-action="export:inventory">Export inventory</button></div>
-    </article>`;
-}
-
-function notificationsPage() {
-  const low = (records.inventory || []).filter(x => getNum(x, "minStock") > 0 && getNum(x, "quantity", "stock") <= getNum(x, "minStock"));
-  const overdueTasks = (records.tasks || []).filter(x => x.dueDate && x.dueDate < today() && x.status !== "completed");
-  const overdueInvoices = (records.invoices || []).filter(x => x.dueDate && x.dueDate < today() && x.status !== "paid");
-  const items = [
-    ...low.map(x => ({ title: `Low stock: ${x.name}`, note: `Remaining quantity: ${getNum(x, "quantity", "stock")}` })),
-    ...overdueTasks.map(x => ({ title: `Overdue task: ${x.title}`, note: `Due date: ${x.dueDate}` })),
-    ...overdueInvoices.map(x => ({ title: `Invoice overdue: ${x.invoiceNo}`, note: `Due date: ${x.dueDate}` }))
-  ];
-  return `${pageHead("Notifications", "Important items calculated from your saved workspace data.")}
-    <article class="nx-card"><div class="nx-card-head"><h3 class="nx-section-title">Business alerts</h3><span class="nx-status ${items.length ? "pending" : "done"}">${items.length} alert${items.length === 1 ? "" : "s"}</span></div>
-      ${items.length ? items.map(x => `<div class="nx-notification"><b>${esc(x.title)}</b><small>${esc(x.note)}</small></div>`).join("") : emptyState("All caught up", "No low-stock items, overdue tasks or overdue invoices were found.")}</article>`;
-}
-
-function render() {
-  $("nxWorkspaceName").textContent = workspaceName;
-  $("nxCrumb").textContent = menu.find(x => x[0] === page)?.[2] || (page === "notifications" ? "Notifications" : page);
-  document.querySelectorAll(".nx-nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.page === page));
-  let html = "";
-  if (page === "dashboard") html = dashboardPage();
-  else if (page === "reports") html = reportsPage();
-  else if (page === "settings") html = settingsPage();
-  else if (page === "notifications") html = notificationsPage();
-  else if (modules[page]) html = renderCollection(page);
-  else html = `${pageHead("Coming soon", "This module is not enabled in this version.")}<article class="nx-card">${emptyState("Not available yet", "Connect and configure the required service before using this module.")}</article>`;
-  $("nxContent").innerHTML = html;
-  bindPageEvents();
-}
-
-function bindPageEvents() {
-  $("nxContent").onclick = async e => {
-    const nav = e.target.closest("[data-page]");
-    if (nav) return go(nav.dataset.page);
-
-    const actionBtn = e.target.closest("[data-action]");
-    if (actionBtn) {
-      const action = actionBtn.dataset.action;
-      if (action.startsWith("new:")) return openModal(action.split(":")[1]);
-      if (action.startsWith("page:")) return go(action.split(":")[1]);
-      if (action.startsWith("export:")) return exportCSV(action.split(":")[1]);
-      if (action.startsWith("import:")) return importCSV(action.split(":")[1]);
-    }
-
-    const edit = e.target.closest("[data-edit]");
-    if (edit) {
-      const item = (records[edit.dataset.edit] || []).find(x => x.id === edit.dataset.id);
-      if (item) openModal(edit.dataset.edit, item);
-      return;
-    }
-
-    const del = e.target.closest("[data-delete]");
-    if (del) {
-      const { delete: unused } = del.dataset;
-      if (!confirm("Delete this record permanently?")) return;
-      try {
-        await removeRecord(del.dataset.delete, del.dataset.id);
-        await loadRecords();
-        render();
-        notify("Record deleted.");
-      } catch (error) { notify(authError(error), "error"); }
-    }
-  };
-
-  const filter = $("nxTableFilter");
-  if (filter) filter.addEventListener("input", () => {
-    const query = filter.value.toLowerCase();
-    document.querySelectorAll("#nxCollectionTable tbody tr").forEach(row => {
-      row.style.display = row.textContent.toLowerCase().includes(query) ? "" : "none";
-    });
-  });
-
-  const profileForm = $("nxProfileForm");
-  if (profileForm) profileForm.onsubmit = async e => {
-    e.preventDefault();
-    const data = new FormData(profileForm);
-    const name = String(data.get("name") || "").trim();
-    const businessName = String(data.get("businessName") || "").trim();
-    const profession = String(data.get("profession") || "General Business").trim();
-    const currency = String(data.get("currency") || "PKR");
-    try {
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        name,
-        email: user.email || "",
-        role: profile.role || "user",
-        plan: profile.plan || "free",
-        businessName,
-        profession,
-        currency,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      profile = { ...profile, name, businessName, profession, currency };
-      $("nxUserName").textContent = name;
-      $("nxAvatar").textContent = (name[0] || "U").toUpperCase();
-      workspaceName = businessName || "My Business";
-      await loadWorkspaceList();
-      notify("Business settings saved.");
-      render();
-    } catch (error) {
-      notify(authError(error), "error");
-    }
-  };
-
-  const signout = $("nxSignOut");
-  if (signout) signout.onclick = async () => {
-    try { await signOut(auth); } catch (error) { notify(authError(error), "error"); }
-  };
-}
-
-function csvCell(value) {
-  const s = String(value ?? "");
-  return `"${s.replace(/"/g, '""')}"`;
-}
-
-function exportCSV(name) {
-  const list = records[name] || [];
-  if (!list.length) {
-    notify("There are no records to export.", "error");
-    return;
-  }
-  const keys = [...new Set(list.flatMap(item => Object.keys(item).filter(k => !["id", "workspaceId", "createdAt", "updatedAt"].includes(k))))];
-  const csv = [keys.map(csvCell).join(","), ...list.map(item => keys.map(k => csvCell(item[k])).join(","))].join("\r\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `nexora-${name}-${today()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  notify("CSV export ready.");
-}
-
-function parseCSV(text) {
-  const rows = [];
-  let row = [], value = "", quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i], next = text[i + 1];
-    if (quoted && c === '"' && next === '"') { value += '"'; i++; }
-    else if (c === '"') quoted = !quoted;
-    else if (c === "," && !quoted) { row.push(value); value = ""; }
-    else if ((c === "\n" || c === "\r") && !quoted) {
-      if (c === "\r" && next === "\n") i++;
-      row.push(value); rows.push(row); row = []; value = "";
-    } else value += c;
-  }
-  if (value.length || row.length) { row.push(value); rows.push(row); }
-  return rows.filter(r => r.some(v => v.trim() !== ""));
-}
-
-function importCSV(name) {
-  if (!fields[name]) {
-    notify("CSV import is currently supported for editable modules only.", "error");
-    return;
-  }
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".csv,text/csv";
-  input.onchange = async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    try {
-      const parsed = parseCSV(await file.text());
-      if (parsed.length < 2) throw new Error("The CSV file has no data rows.");
-      const headers = parsed[0].map(h => h.trim().toLowerCase());
-      const allowed = new Set(fields[name].map(f => f[0]));
-      const mapped = headers.map(h => h.replace(/[\s/-]+/g, "").replace(/^name$/, name === "customers" || name === "suppliers" ? "name" : "name"));
-      const usable = mapped.filter(h => allowed.has(h));
-      if (!usable.length) throw new Error("No matching column names found. Export a sample CSV first to see supported headers.");
-      if (!confirm(`Import ${parsed.length - 1} row(s) into ${labels[name][0]}?`)) return;
-      let count = 0;
-      for (const row of parsed.slice(1)) {
-        const item = {};
-        mapped.forEach((key, i) => {
-          if (!allowed.has(key) || row[i] == null) return;
-          const def = fields[name].find(f => f[0] === key);
-          item[key] = def?.[2] === "number" ? Number(row[i]) || 0 : row[i].trim();
-        });
-        if (Object.keys(item).length) {
-          for (const f of fields[name]) if (f[3] && (item[f[0]] == null || item[f[0]] === "")) item[f[0]] = f[2] === "number" ? 0 : "";
-          await saveRecord(name, item);
-          count++;
-        }
-      }
-      await loadRecords();
-      render();
-      notify(`${count} row(s) imported.`);
-    } catch (error) {
-      notify(error.message || authError(error), "error");
-    }
-  };
-  input.click();
-}
-
-function runSearch() {
-  const q = $("nxSearch").value.trim().toLowerCase();
-  const box = $("nxSearchResults");
-  if (!q) {
-    box.classList.add("nx-hidden");
-    box.innerHTML = "";
-    return;
-  }
-  const found = [];
-  for (const [name, list] of Object.entries(records)) {
-    if (!modules[name]) continue;
-    for (const item of list) {
-      const text = Object.values(item).filter(v => typeof v === "string" || typeof v === "number").join(" ");
-      if (text.toLowerCase().includes(q)) {
-        found.push({ name, item, title: item.name || item.title || item.description || item.invoiceNo || item.billNo || name });
-        if (found.length >= 15) break;
-      }
-    }
-    if (found.length >= 15) break;
-  }
-  box.innerHTML = found.length ? found.map(x =>
-    `<button class="nx-search-result" data-result-page="${esc(x.name)}">${esc(x.title)}<small>${esc(labels[x.name]?.[0] || x.name)} · ${esc(x.item.date || x.item.status || "")}</small></button>`
-  ).join("") : `<div class="nx-empty">No matching records found.</div>`;
-  box.classList.remove("nx-hidden");
-}
-
-installUI();
-
-onAuthStateChanged(auth, async firebaseUser => {
-  if (!firebaseUser) {
-    user = null;
-    $("nxWorkspace").classList.add("nx-hidden");
-    $("nxAuth").classList.remove("nx-hidden");
-    return;
-  }
-  try {
-    await loadAccount(firebaseUser);
-  } catch (error) {
-    console.error("NEXORA startup error:", error);
-    notify("Could not load workspace data. Check Firestore rules and connection.", "error");
-  }
+onAuthStateChanged(auth,async user=>{
+ state.user=user;
+ if(!user){$("#appView").classList.add("hidden");$("#authView").classList.remove("hidden");return}
+ try{await ensureProfile(user);await showApp()}catch(e){notify(friendlyError(e),true);$("#authView").classList.remove("hidden");$("#appView").classList.add("hidden")}
 });
+installAppEvents();bindDynamicEvents();setAuthMode("login");

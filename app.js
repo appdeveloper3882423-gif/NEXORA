@@ -1,296 +1,1753 @@
-// NEXORA — Business Command Center
-// Version 2.0.0
+
+/* =========================================================
+   NEXORA — BUSINESS COMMAND CENTER
+   Version: 2.2.0
+   File: app.js
+   ========================================================= */
+
 import { auth, db, googleProvider } from "./firebase.js";
+
 import {
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
-  onAuthStateChanged, sendPasswordResetEmail, updateProfile, signInWithPopup
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  updateProfile,
+  signInWithPopup
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
 import {
-  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
-  serverTimestamp, query, orderBy, writeBatch
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-const VERSION = "2.0.0";
-const $ = (s, root=document) => root.querySelector(s);
-const $$ = (s, root=document) => [...root.querySelectorAll(s)];
-const money = n => new Intl.NumberFormat("en-US",{style:"currency",currency:state.settings?.currency||"USD",maximumFractionDigits:2}).format(Number(n)||0);
-const dateFmt = v => { if(!v)return "—"; let d=v?.toDate?v.toDate():new Date(v); return Number.isNaN(d.getTime())?"—":d.toLocaleDateString(); };
-const isoToday = () => new Date().toISOString().slice(0,10);
-const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const slug = v => String(v||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-const state = { user:null, profile:null, page:"dashboard", authMode:"login", records:{}, settings:{businessName:"My Business",currency:"USD",taxRate:0,dateFormat:"local"}, workspaceId:"default", workspaces:[], search:"", busy:false };
-const modules = {
- transactions:{title:"Transactions",crumb:"Income, expenses and transfers",collection:"transactions",icon:"↔",fields:[
-  ["description","Description","text",true],["type","Type","select",true,["Income","Expense","Transfer"]],["category","Category","text",true],["amount","Amount","number",true],["date","Date","date",true],["paymentMethod","Payment Method","select",false,["Cash","Bank Transfer","Card","Online","Other"]],["reference","Reference","text",false],["notes","Notes","textarea",false]]},
- customers:{title:"Customers & Leads",crumb:"Customer relationships and sales pipeline",collection:"customers",icon:"♙",fields:[
-  ["name","Customer / Lead Name","text",true],["type","Type","select",true,["Customer","Lead"]],["email","Email","email",false],["phone","Phone","tel",false],["company","Company","text",false],["status","Status","select",true,["New","Contacted","Qualified","Proposal","Won","Lost","Active"]],["value","Potential Value","number",false],["notes","Notes","textarea",false]]},
- suppliers:{title:"Suppliers",crumb:"Supplier directory and contact records",collection:"suppliers",icon:"♧",fields:[
-  ["name","Supplier Name","text",true],["company","Company","text",false],["email","Email","email",false],["phone","Phone","tel",false],["address","Address","text",false],["status","Status","select",true,["Active","Inactive"]],["notes","Notes","textarea",false]]},
- inventory:{title:"Inventory",crumb:"Products, stock levels and reorder alerts",collection:"inventory",icon:"▦",fields:[
-  ["name","Product Name","text",true],["sku","SKU / Barcode","text",false],["category","Category","text",true],["quantity","Stock Quantity","number",true],["minStock","Minimum Stock","number",false],["cost","Unit Cost","number",true],["price","Selling Price","number",true],["supplier","Supplier","text",false],["expiry","Expiry Date","date",false],["notes","Notes","textarea",false]]},
- projects:{title:"Projects & Tasks",crumb:"Projects, milestones and task tracking",collection:"projects",icon:"◷",fields:[
-  ["name","Project / Task Name","text",true],["type","Record Type","select",true,["Project","Task"]],["status","Status","select",true,["Not Started","In Progress","On Hold","Completed"]],["priority","Priority","select",true,["Low","Medium","High","Urgent"]],["startDate","Start Date","date",false],["dueDate","Due Date","date",false],["assignee","Assigned To","text",false],["progress","Progress (%)","number",false],["budget","Budget","number",false],["notes","Notes","textarea",false]]},
- invoices:{title:"Invoices & Quotes",crumb:"Sales documents and payment status",collection:"invoices",icon:"▤",fields:[
-  ["number","Invoice / Quote Number","text",true],["type","Document Type","select",true,["Invoice","Quote","Estimate","Receipt","Credit Note"]],["customer","Customer","text",true],["issueDate","Issue Date","date",true],["dueDate","Due Date","date",false],["amount","Total Amount","number",true],["tax","Tax Amount","number",false],["status","Status","select",true,["Draft","Sent","Partially Paid","Paid","Overdue","Cancelled"]],["notes","Notes","textarea",false]]},
- bills:{title:"Bills & Purchases",crumb:"Supplier bills and outgoing payments",collection:"bills",icon:"▧",fields:[
-  ["number","Bill Number","text",true],["supplier","Supplier","text",true],["date","Bill Date","date",true],["dueDate","Due Date","date",false],["amount","Amount","number",true],["status","Status","select",true,["Unpaid","Partially Paid","Paid","Overdue"]],["category","Category","text",false],["notes","Notes","textarea",false]]},
- appointments:{title:"Appointments",crumb:"Bookings, visits and reminders",collection:"appointments",icon:"▣",fields:[
-  ["title","Appointment Title","text",true],["person","Customer / Person","text",false],["date","Date","date",true],["time","Time","time",false],["status","Status","select",true,["Scheduled","Confirmed","Completed","Cancelled","No Show"]],["location","Location","text",false],["notes","Notes","textarea",false]]},
- branches:{title:"Branches",crumb:"Locations, branches and warehouses",collection:"branches",icon:"⌂",fields:[
-  ["name","Branch / Warehouse Name","text",true],["code","Branch Code","text",false],["manager","Manager","text",false],["phone","Phone","tel",false],["address","Address","text",false],["status","Status","select",true,["Active","Inactive"]],["notes","Notes","textarea",false]]}
+const VERSION = "2.2.0";
+
+const $ = (selector, root = document) => root.querySelector(selector);
+
+const state = {
+  user: null,
+  profile: null,
+  page: "dashboard",
+  authMode: "login",
+  records: {},
+  settings: {
+    businessName: "My Business",
+    currency: "PKR",
+    taxRate: 0,
+    dateFormat: "local"
+  },
+  workspaceId: "default",
+  workspaces: [],
+  search: ""
 };
-function notify(msg,error=false){const el=document.createElement("div");el.className="toast"+(error?" error":"");el.textContent=msg;$("#toastRoot").append(el);setTimeout(()=>el.remove(),3600)}
-function userCollection(name){if(!state.user)throw Error("Please sign in first.");return collection(db,"users",state.user.uid,name)}
-function userDoc(){return doc(db,"users",state.user.uid)}
-function activeCollection(name){return userCollection(name)}
-function belongsHere(r){return (r.workspaceId||"default")===state.workspaceId}
-async function getRecords(name, allWorkspaces=false){
- const snap=await getDocs(activeCollection(name));
- let rows=snap.docs.map(d=>({id:d.id,...d.data()}));
- if(name!=="workspaces"&&!allWorkspaces)rows=rows.filter(belongsHere);
- rows.sort((a,b)=>String(b.date||b.issueDate||b.createdAt?.seconds||"").localeCompare(String(a.date||a.issueDate||a.createdAt?.seconds||"")));
- state.records[name]=rows;return rows;
-}
-async function ensureProfile(user){
- const ref=userDoc(),snap=await getDoc(ref);
- if(!snap.exists()){
-  const profile={uid:user.uid,name:user.displayName||user.email?.split("@")[0]||"NEXORA User",email:user.email||"",role:"user",plan:"free",businessName:"My Business",currency:"USD",taxRate:0,dateFormat:"local",createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
-  await setDoc(ref,profile);state.profile={...profile};
- }else{
-  const p=snap.data();
-  const patch={uid:user.uid,email:user.email||p.email||"",name:p.name||user.displayName||user.email?.split("@")[0]||"NEXORA User",role:p.role||"user",plan:p.plan||"free",businessName:p.businessName||"My Business",currency:p.currency||"USD",taxRate:Number(p.taxRate)||0,dateFormat:p.dateFormat||"local",updatedAt:serverTimestamp()};
-  await setDoc(ref,patch,{merge:true});state.profile={...p,...patch};
- }
- state.settings={businessName:state.profile.businessName,currency:state.profile.currency||"USD",taxRate:Number(state.profile.taxRate)||0,dateFormat:state.profile.dateFormat||"local"};
-}
-async function loadAll(){
- for(const name of [...Object.keys(modules),"workspaces"])await getRecords(name,name==="workspaces");
- const ws=state.records.workspaces||[];
- state.workspaces=[{id:"default",name:"Main Workspace",description:"Your primary business workspace"},...ws.map(w=>({id:w.id,name:w.name||"Untitled Workspace",description:w.description||""})).filter(w=>w.id!=="default")];
- if(!state.workspaces.some(w=>w.id===state.workspaceId))state.workspaceId="default";
- renderWorkspaceSelect();
-}
-function renderWorkspaceSelect(){
- const el=$("#workspaceSelect");if(!el)return;
- el.innerHTML=state.workspaces.map(w=>`<option value="${esc(w.id)}"${w.id===state.workspaceId?" selected":""}>${esc(w.name)}</option>`).join("");
-}
-function setAuthMode(mode){
- state.authMode=mode;const reg=mode==="register";
- $("#authHeading").textContent=reg?"Create your NEXORA account":"Welcome back";
- $("#authDescription").textContent=reg?"Create your secure business workspace in minutes.":"Sign in to manage your business from one command center.";
- $("#nameField").classList.toggle("hidden",!reg);$("#forgotPassword").classList.toggle("hidden",reg);
- $("#authSubmit").textContent=reg?"Create Account":"Sign In";$("#showLogin").className="btn"+(!reg?" primary":"");$("#showRegister").className="btn"+(reg?" primary":"");
- $("#authMessage").classList.add("hidden");
-}
-function showAuthMessage(msg,error=false){const el=$("#authMessage");el.textContent=msg;el.classList.remove("hidden");el.style.background=error?"#3a1d2a":"#18243b"}
-async function handleAuth(e){
- e.preventDefault();const email=$("#authEmail").value.trim(),password=$("#authPassword").value,name=$("#authName").value.trim();
- const btn=$("#authSubmit");btn.disabled=true;btn.textContent="Please wait…";
- try{
-  if(state.authMode==="register"){
-   if(!name)throw Error("Please enter your full name.");
-   const cred=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(cred.user,{displayName:name});
-  }else await signInWithEmailAndPassword(auth,email,password);
- }catch(err){showAuthMessage(friendlyError(err),true)}finally{btn.disabled=false;btn.textContent=state.authMode==="register"?"Create Account":"Sign In"}
-}
-function friendlyError(err){
- const code=err?.code||"";
- const map={"auth/email-already-in-use":"This email already has an account. Please sign in.","auth/invalid-email":"Please enter a valid email address.","auth/weak-password":"Use a password with at least 6 characters.","auth/invalid-credential":"Email or password is incorrect.","auth/user-not-found":"No account was found for this email.","auth/wrong-password":"Email or password is incorrect.","auth/too-many-requests":"Too many attempts. Please try again later.","permission-denied":"Firestore permission denied. Please check your Firebase rules.","unavailable":"Network unavailable. Check your internet connection."};
- return map[code]||err?.message||"Something went wrong. Please try again.";
-}
-const pageMeta={dashboard:["Command Center","Your business at a glance"],reports:["Reports & Data","Business performance and data tools"],workspaces:["Business Workspaces","Manage separate work areas"],settings:["Business Settings","Configure your business profile"]};
-function navTo(page){
- state.page=page;$$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
- const meta=modules[page]? [modules[page].title,modules[page].crumb] : pageMeta[page]||[page,"NEXORA Workspace"];
- $("#topTitle").textContent=meta[0];$("#topCrumb").textContent=meta[1];$("#sidebar").classList.remove("open");renderPage();
-}
-function statCard(label,value,icon,color,foot="Current workspace"){
- return `<div class="stat" style="--glow:${color}"><div class="stat-top"><div class="stat-label">${esc(label)}</div><div class="stat-icon">${icon}</div></div><div class="stat-value">${esc(value)}</div><div class="stat-foot">${esc(foot)}</div></div>`;
-}
-function tableFor(name,rows){
- const m=modules[name];if(!m)return "";
- const cols=m.fields.filter(f=>["name","description","type","category","amount","date","status","quantity","price","customer","supplier","dueDate","priority","number","title","progress"].includes(f[0])).slice(0,5);
- if(!rows.length)return `<div class="empty">No records yet. Use <b>＋ Add New</b> to create your first record.</div>`;
- return `<div class="table-wrap"><table><thead><tr>${cols.map(f=>`<th>${esc(f[1])}</th>`).join("")}<th>Actions</th></tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(f=>`<td>${cellValue(f[0],r[f[0]],r)}</td>`).join("")}<td><div class="table-actions"><button class="icon-btn" data-edit="${esc(name)}:${esc(r.id)}" title="Edit">✎</button><button class="icon-btn" data-delete="${esc(name)}:${esc(r.id)}" title="Delete">×</button></div></td></tr>`).join("")}</tbody></table></div>`;
-}
-function cellValue(key,val,row){
- if(val===undefined||val===null||val==="")return '<span class="muted">—</span>';
- if(["amount","price","cost","budget","value"].includes(key))return `<span class="${key==="amount"&&row.type==="Expense"?"negative":""}">${money(val)}</span>`;
- if(["date","dueDate","issueDate","startDate","expiry"].includes(key))return esc(dateFmt(val));
- if(key==="status")return `<span class="status ${/paid|completed|won|active|confirmed/i.test(val)?"good":/overdue|lost|cancelled|urgent/i.test(val)?"bad":/progress|sent|qualified|contacted/i.test(val)?"warn":""}">${esc(val)}</span>`;
- if(key==="quantity")return `<span class="${Number(val)<=Number(row.minStock||0)?"negative":""}">${esc(val)}</span>`;
- if(key==="progress")return `${esc(val)}%`;
- return esc(val);
-}
-function pageToolbar(name){
- return `<div class="page-toolbar"><div class="toolbar-left"><input class="filter" id="moduleSearch" placeholder="Filter records…" value="${esc(state.search)}"></div><div class="toolbar-right"><button class="btn" data-export="${name}">Export CSV</button><button class="btn primary" data-add="${name}">＋ Add New</button></div></div>`;
-}
-function dashboardPage(){
- const tx=state.records.transactions||[],inv=state.records.inventory||[],customers=state.records.customers||[],projects=state.records.projects||[],invoices=state.records.invoices||[];
- const income=tx.filter(t=>t.type==="Income").reduce((s,t)=>s+Number(t.amount||0),0),expenses=tx.filter(t=>t.type==="Expense").reduce((s,t)=>s+Number(t.amount||0),0),profit=income-expenses;
- const low=inv.filter(i=>Number(i.quantity||0)<=Number(i.minStock||0)).length;
- const openTasks=projects.filter(p=>p.status!=="Completed").length;
- const recent=[...tx].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,6);
- const months=Array.from({length:6},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-5+i);return {key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`,label:d.toLocaleString("en-US",{month:"short"}),income:0,expense:0}});
- tx.forEach(t=>{const key=String(t.date||"").slice(0,7),m=months.find(x=>x.key===key);if(m){if(t.type==="Income")m.income+=Number(t.amount||0);if(t.type==="Expense")m.expense+=Number(t.amount||0)}});
- const max=Math.max(1,...months.flatMap(m=>[m.income,m.expense]));
- return `<div class="welcome"><div><div class="eyebrow">BUSINESS INTELLIGENCE · V${VERSION}</div><h1>Good to see you, ${esc(state.profile?.name?.split(" ")[0]||"there")}.</h1><p>Here is what is happening across ${esc(state.settings.businessName||"your business")}.</p></div><button class="btn primary" data-add="transactions">＋ Record Transaction</button></div>
- <div class="grid stats">${statCard("Total Income",money(income),"↗","var(--green)",`${tx.filter(t=>t.type==="Income").length} income entries`)}${statCard("Total Expenses",money(expenses),"↘","var(--red)",`${tx.filter(t=>t.type==="Expense").length} expense entries`)}${statCard("Net Profit / Loss",money(profit),"◈","var(--blue)",profit>=0?"Income exceeds expenses":"Expenses exceed income")}${statCard("Inventory Alerts",String(low),"▦","var(--amber)",`${inv.length} products tracked`)}</div>
- <div class="grid two-col"><section class="panel"><div class="panel-head"><div><div class="panel-title">Cash Flow Overview</div><div class="panel-sub">Income and expenses · last 6 months</div></div><span class="status">LIVE DATA</span></div><div class="chart">${months.map(m=>`<div class="bar-wrap" title="${m.label}: ${money(m.income)} income / ${money(m.expense)} expense"><div style="display:flex;align-items:flex-end;justify-content:center;gap:4px;height:100%;width:100%"><div class="bar" style="height:${Math.max(2,m.income/max*100)}%;background:linear-gradient(180deg,#43ddb3,#1c8f83)"></div><div class="bar" style="height:${Math.max(2,m.expense/max*100)}%;background:linear-gradient(180deg,#a47aff,#5d59d9)"></div></div><div class="bar-label">${m.label}</div></div>`).join("")}</div><div class="legend"><span><i class="dot" style="background:#43ddb3"></i>Income</span><span><i class="dot" style="background:#8a73f3"></i>Expenses</span></div></section>
- <section class="panel"><div class="panel-head"><div><div class="panel-title">Operations Snapshot</div><div class="panel-sub">Key activity indicators</div></div></div><div class="list">${[['Customers & Leads',customers.length,'♙'],['Active Projects / Tasks',openTasks,'◷'],['Invoices Issued',invoices.length,'▤'],['Products in Inventory',inv.length,'▦']].map(x=>`<div class="list-row"><div style="display:flex;gap:10px;align-items:center"><div class="stat-icon">${x[2]}</div><div class="list-main"><div class="list-name">${x[0]}</div><div class="list-meta">Current workspace</div></div></div><div class="amount">${x[1]}</div></div>`).join("")}</div></section></div>
- <section class="panel" style="margin-top:18px"><div class="panel-head"><div><div class="panel-title">Recent Transactions</div><div class="panel-sub">Latest income and expenses</div></div><button class="btn" data-goto="transactions">View All →</button></div>${tableFor("transactions",recent)}</section>
- <div class="footer-note">NEXORA v${VERSION} · One Platform. Every Profession.</div>`;
-}
-function modulePage(name){
- let rows=(state.records[name]||[]);const q=state.search.trim().toLowerCase();
- if(q)rows=rows.filter(r=>Object.values(r).some(v=>String(v??"").toLowerCase().includes(q)));
- return `<div class="welcome"><div><div class="eyebrow">NEXORA WORKSPACE</div><h1>${esc(modules[name].title)}</h1><p>${esc(modules[name].crumb)}</p></div></div>${pageToolbar(name)}<section class="panel"><div class="panel-head"><div><div class="panel-title">${rows.length} Records</div><div class="panel-sub">Stored securely under your account and workspace.</div></div></div>${tableFor(name,rows)}</section>`;
-}
-function workspacesPage(){
- const rows=state.workspaces;
- return `<div class="welcome"><div><div class="eyebrow">MULTI-BUSINESS MANAGEMENT</div><h1>Business Workspaces</h1><p>Keep each business workspace logically separate within your account.</p></div><button class="btn primary" data-add="workspaces">＋ New Workspace</button></div><div class="notice" style="margin-bottom:18px">Workspace data is separated by workspace ID in the app. This is a personal account feature, not shared team access. Team membership requires a separate permission model.</div><div class="grid section-grid">${rows.map(w=>`<div class="panel"><div class="stat-icon">▣</div><h3 style="font:800 15px Manrope;margin:14px 0 6px">${esc(w.name)}</h3><p class="muted small">${esc(w.description||"Business workspace")}</p><div style="display:flex;gap:8px;margin-top:18px"><button class="btn ${state.workspaceId===w.id?"good":"primary"}" data-switch-workspace="${esc(w.id)}">${state.workspaceId===w.id?"Current Workspace":"Switch Workspace"}</button>${w.id!=="default"?`<button class="btn" data-edit="workspaces:${esc(w.id)}">Edit</button>`:""}</div></div>`).join("")}</div>`;
-}
-function reportsPage(){
- const tx=state.records.transactions||[],income=tx.filter(t=>t.type==="Income").reduce((a,t)=>a+Number(t.amount||0),0),expense=tx.filter(t=>t.type==="Expense").reduce((a,t)=>a+Number(t.amount||0),0);
- return `<div class="welcome"><div><div class="eyebrow">INSIGHTS & DATA TOOLS</div><h1>Reports & Data</h1><p>Review performance and export your workspace data.</p></div></div><div class="grid stats">${statCard("Income",money(income),"↗","var(--green)")}${statCard("Expenses",money(expense),"↘","var(--red)")}${statCard("Net Result",money(income-expense),"◈","var(--blue)")}${statCard("Transactions",String(tx.length),"↔","var(--purple)")}</div><div class="grid section-grid">${Object.keys(modules).map(n=>`<div class="feature-card"><div class="stat-icon">${modules[n].icon}</div><h3>${modules[n].title}</h3><p>Export current workspace records to CSV for backup, analysis or migration.</p><button class="btn" style="margin-top:14px" data-export="${n}">Export CSV</button></div>`).join("")}</div><section class="panel" style="margin-top:18px"><div class="panel-head"><div><div class="panel-title">CSV Import</div><div class="panel-sub">Import simple records into a selected module. Existing data is not overwritten.</div></div></div><div class="field"><label>DESTINATION MODULE</label><select id="importModule" class="filter">${Object.keys(modules).map(n=>`<option value="${n}">${modules[n].title}</option>`).join("")}</select></div><div class="field"><label>CSV FILE</label><input id="importFile" type="file" accept=".csv,text/csv"></div><button class="btn primary" id="runImport">Import CSV</button><p class="small muted">Use a header row. Import is best-effort and supports plain text fields, numbers and dates. Review records after import.</p></section>`;
-}
-function settingsPage(){
- return `<div class="welcome"><div><div class="eyebrow">YOUR BUSINESS PROFILE</div><h1>Business Settings</h1><p>Personalize the command center for your business.</p></div></div><div class="grid settings-grid"><section class="panel"><div class="panel-head"><div><div class="panel-title">Business Preferences</div><div class="panel-sub">These settings apply to your account.</div></div></div><form id="settingsForm"><div class="field"><label>BUSINESS NAME</label><input name="businessName" required value="${esc(state.settings.businessName)}"></div><div class="field"><label>REPORTING CURRENCY</label><select name="currency">${["USD","PKR","GBP","EUR","AED","SAR","INR","CAD","AUD"].map(c=>`<option ${state.settings.currency===c?"selected":""}>${c}</option>`).join("")}</select></div><div class="field"><label>DEFAULT TAX RATE (%)</label><input name="taxRate" type="number" min="0" max="100" step=".01" value="${Number(state.settings.taxRate)||0}"></div><div class="field"><label>DATE FORMAT</label><select name="dateFormat"><option value="local" ${state.settings.dateFormat==="local"?"selected":""}>Local format</option><option value="iso" ${state.settings.dateFormat==="iso"?"selected":""}>YYYY-MM-DD</option></select></div><button class="btn primary">Save Preferences</button></form></section><section class="panel"><div class="panel-head"><div><div class="panel-title">Account & Security</div><div class="panel-sub">Signed-in Firebase account details</div></div></div><div class="list"><div class="list-row"><div><div class="list-name">Name</div><div class="list-meta">${esc(state.profile?.name||"NEXORA User")}</div></div></div><div class="list-row"><div><div class="list-name">Email</div><div class="list-meta">${esc(state.user?.email||"")}</div></div></div><div class="list-row"><div><div class="list-name">Plan</div><div class="list-meta">${esc(state.profile?.plan||"free").toUpperCase()} · plan display only; billing is not connected</div></div></div><div class="list-row"><div><div class="list-name">App Version</div><div class="list-meta">NEXORA ${VERSION}</div></div></div></div><div class="notice" style="margin-top:16px">Never share your Firebase service-account key. The web configuration key is intended for client apps; secure access depends on Firestore rules and Firebase Authentication.</div><button class="btn" id="exportBackup" style="margin-top:14px">Export Workspace Backup (JSON)</button></section></div>`;
-}
-function renderPage(){
- if(!state.user)return;
- if(state.page==="dashboard")$("#pageContent").innerHTML=dashboardPage();
- else if(modules[state.page])$("#pageContent").innerHTML=modulePage(state.page);
- else if(state.page==="workspaces")$("#pageContent").innerHTML=workspacesPage();
- else if(state.page==="reports")$("#pageContent").innerHTML=reportsPage();
- else if(state.page==="settings")$("#pageContent").innerHTML=settingsPage();
- else $("#pageContent").innerHTML=`<section class="panel"><h2>Module unavailable</h2><p class="muted">Choose a module from the navigation.</p></section>`;
-}
-function fieldControl(f,record={}){
- const [key,label,type,required,options]=f;let val=record[key]??"";
- if(type==="date"&&!val&&["date","issueDate","startDate"].includes(key))val=isoToday();
- const req=required?"required":"";
- if(type==="select")return `<div class="field"><label>${esc(label.toUpperCase())}${required?" *":""}</label><select name="${esc(key)}" ${req}>${(options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===o?"selected":""}>${esc(o)}</option>`).join("")}</select></div>`;
- if(type==="textarea")return `<div class="field span-2"><label>${esc(label.toUpperCase())}</label><textarea name="${esc(key)}" ${req}>${esc(val)}</textarea></div>`;
- return `<div class="field"><label>${esc(label.toUpperCase())}${required?" *":""}</label><input name="${esc(key)}" type="${esc(type)}" value="${esc(val)}" ${type==="number"?'step="any"':''} ${req}></div>`;
-}
-function openRecordModal(name,id=null){
- if(name==="workspaces"){
-  const record=id?state.workspaces.find(w=>w.id===id)||{}:{};
-  modal(`Workspace ${id?"Settings":"Creation"}`,`<form id="recordForm"><div class="field"><label>WORKSPACE NAME</label><input name="name" required value="${esc(record.name||"")}" placeholder="e.g. Retail Business"></div><div class="field"><label>DESCRIPTION</label><textarea name="description">${esc(record.description||"")}</textarea></div></form>`,async form=>{
-   const data=Object.fromEntries(new FormData(form));if(!data.name.trim())throw Error("Workspace name is required.");
-   if(id){await updateDoc(doc(db,"users",state.user.uid,"workspaces",id),{name:data.name.trim(),description:data.description,updatedAt:serverTimestamp()})}
-   else{const ref=await addDoc(userCollection("workspaces"),{...data,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});state.workspaceId=ref.id}
-   await loadAll();navTo("workspaces");notify("Workspace saved.");
-  });return;
- }
- const m=modules[name];if(!m)return;
- const record=id?(state.records[name]||[]).find(r=>r.id===id)||{}:{};
- modal(`${id?"Edit":"Add"} ${m.title}`,`<form id="recordForm"><div class="form-grid">${m.fields.map(f=>fieldControl(f,record)).join("")}</div></form>`,async form=>{
-  const fd=new FormData(form),data={};
-  for(const f of m.fields){const k=f[0],v=fd.get(k);if(v!==null&&v!=="")data[k]=f[2]==="number"?Number(v):String(v).trim();else data[k]=f[2]==="number"?0:""}
-  for(const f of m.fields)if(f[3]&&!String(data[f[0]]??"").trim())throw Error(`${f[1]} is required.`);
-  data.workspaceId=state.workspaceId;data.updatedAt=serverTimestamp();
-  if(id)await updateDoc(doc(db,"users",state.user.uid,m.collection,id),data);
-  else await addDoc(userCollection(m.collection),{...data,createdAt:serverTimestamp()});
-  await getRecords(name);closeModal();renderPage();notify(id?"Record updated.":"Record created.");
- });
-}
-function modal(title,body,onSave){
- $("#modalRoot").innerHTML=`<div class="modal-backdrop" id="modalBackdrop"><section class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" id="modalClose">×</button></div><div class="modal-body">${body}</div><div class="modal-foot"><button class="btn" id="modalCancel">Cancel</button><button class="btn primary" id="modalSave">Save Record</button></div></section></div>`;
- const close=()=>closeModal();$("#modalClose").onclick=close;$("#modalCancel").onclick=close;
- $("#modalBackdrop").addEventListener("click",e=>{if(e.target.id==="modalBackdrop")close()});
- $("#modalSave").onclick=async()=>{const form=$("#recordForm");if(form&&!form.reportValidity())return;const b=$("#modalSave");b.disabled=true;b.textContent="Saving…";try{await onSave(form);if($("#modalRoot").innerHTML)closeModal()}catch(err){notify(friendlyError(err),true)}finally{b.disabled=false;b.textContent="Save Record"}};
-}
-function closeModal(){$("#modalRoot").innerHTML=""}
-async function deleteRecord(name,id){
- if(!confirm("Delete this record permanently? This action cannot be undone."))return;
- try{await deleteDoc(doc(db,"users",state.user.uid,name,id));await getRecords(name);renderPage();notify("Record deleted.")}catch(e){notify(friendlyError(e),true)}
-}
-function csvEscape(v){const s=String(v??"");return /[",\n\r]/.test(s)?`"${s.replace(/"/g,'""')}"`:s}
-function exportCSV(name){
- const rows=state.records[name]||[];if(!rows.length){notify("There are no records to export.");return}
- const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(k=>!["id","workspaceId"].includes(k));
- const csv=[keys.map(csvEscape).join(","),...rows.map(r=>keys.map(k=>csvEscape(r[k]?.toDate?r[k].toDate().toISOString():r[k])).join(","))].join("\r\n");
- download(`${name}-${state.workspaceId}-${isoToday()}.csv`,csv,"text/csv;charset=utf-8");notify("CSV export ready.");
-}
-function download(name,content,type){
- const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-function parseCSV(text){
- const rows=[];let row=[],cell="",quoted=false;
- for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&quoted&&n==='"'){cell+='"';i++}else if(c==='"'){quoted=!quoted}else if(c===","&&!quoted){row.push(cell);cell=""}else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&n==="\n")i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=""}else cell+=c}
- if(cell.length||row.length){row.push(cell);rows.push(row)}return rows;
-}
-function normalizeKey(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
-async function importCSV(){
- const file=$("#importFile")?.files?.[0],name=$("#importModule")?.value;if(!file)return notify("Choose a CSV file first.",true);
- const m=modules[name];if(!m)return;
- try{
-  const raw=parseCSV(await file.text());if(raw.length<2)throw Error("CSV must contain a header row and at least one data row.");
-  const fields=m.fields,lookup={};fields.forEach(f=>{lookup[normalizeKey(f[0])]=f[0];lookup[normalizeKey(f[1])]=f[0]});
-  const headers=raw[0].map(h=>lookup[normalizeKey(h)]||null);let count=0;
-  for(const row of raw.slice(1)){const data={workspaceId:state.workspaceId,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
-   headers.forEach((key,i)=>{if(!key)return;const f=fields.find(x=>x[0]===key);let v=(row[i]||"").trim();if(!v)return;data[key]=f?.[2]==="number"?Number(v):v});
-   if(!fields.some(f=>f[3]&&!String(data[f[0]]??"").trim())){await addDoc(userCollection(m.collection),data);count++}
+
+const esc = value =>
+  String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const money = value => {
+  try {
+    return new Intl.NumberFormat("en-PK", {
+      style: "currency",
+      currency: state.settings.currency || "PKR",
+      maximumFractionDigits: 2
+    }).format(Number(value) || 0);
+  } catch {
+    return `${Number(value) || 0}`;
   }
-  await getRecords(name);notify(`Imported ${count} record(s). ${raw.length-1-count} row(s) skipped.`);renderPage();
- }catch(e){notify(friendlyError(e),true)}
+};
+
+const dateText = value => {
+  if (!value) return "—";
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+};
+
+const userDoc = () => doc(db, "users", state.user.uid);
+
+const userCollection = name =>
+  collection(db, "users", state.user.uid, name);
+
+const modules = {
+  transactions: {
+    title: "Transactions",
+    icon: "↔",
+    collection: "transactions",
+    fields: [
+      ["description", "Description", "text", true],
+      ["type", "Type", "select", true, ["Income", "Expense", "Transfer"]],
+      ["category", "Category", "text", true],
+      ["amount", "Amount", "number", true],
+      ["date", "Date", "date", true],
+      ["paymentMethod", "Payment Method", "select", false, ["Cash", "Bank Transfer", "Card", "Online", "Other"]],
+      ["reference", "Reference", "text", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  customers: {
+    title: "Customers & Leads",
+    icon: "♙",
+    collection: "customers",
+    fields: [
+      ["name", "Customer / Lead Name", "text", true],
+      ["type", "Type", "select", true, ["Customer", "Lead"]],
+      ["email", "Email", "email", false],
+      ["phone", "Phone", "tel", false],
+      ["company", "Company", "text", false],
+      ["status", "Status", "select", true, ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost", "Active"]],
+      ["value", "Potential Value", "number", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  suppliers: {
+    title: "Suppliers",
+    icon: "♧",
+    collection: "suppliers",
+    fields: [
+      ["name", "Supplier Name", "text", true],
+      ["company", "Company", "text", false],
+      ["email", "Email", "email", false],
+      ["phone", "Phone", "tel", false],
+      ["address", "Address", "text", false],
+      ["status", "Status", "select", true, ["Active", "Inactive"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  inventory: {
+    title: "Inventory",
+    icon: "▦",
+    collection: "inventory",
+    fields: [
+      ["name", "Product Name", "text", true],
+      ["sku", "SKU / Barcode", "text", false],
+      ["category", "Category", "text", true],
+      ["quantity", "Stock Quantity", "number", true],
+      ["minStock", "Minimum Stock", "number", false],
+      ["cost", "Unit Cost", "number", true],
+      ["price", "Selling Price", "number", true],
+      ["supplier", "Supplier", "text", false],
+      ["expiry", "Expiry Date", "date", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  projects: {
+    title: "Projects & Tasks",
+    icon: "◷",
+    collection: "projects",
+    fields: [
+      ["name", "Project / Task Name", "text", true],
+      ["type", "Record Type", "select", true, ["Project", "Task"]],
+      ["status", "Status", "select", true, ["Not Started", "In Progress", "On Hold", "Completed"]],
+      ["priority", "Priority", "select", true, ["Low", "Medium", "High", "Urgent"]],
+      ["startDate", "Start Date", "date", false],
+      ["dueDate", "Due Date", "date", false],
+      ["assignee", "Assigned To", "text", false],
+      ["progress", "Progress (%)", "number", false],
+      ["budget", "Budget", "number", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  invoices: {
+    title: "Invoices & Quotes",
+    icon: "▤",
+    collection: "invoices",
+    fields: [
+      ["number", "Invoice Number", "text", true],
+      ["type", "Document Type", "select", true, ["Invoice", "Quote", "Estimate", "Receipt", "Credit Note"]],
+      ["customer", "Customer", "text", true],
+      ["issueDate", "Issue Date", "date", true],
+      ["dueDate", "Due Date", "date", false],
+      ["amount", "Total Amount", "number", true],
+      ["tax", "Tax Amount", "number", false],
+      ["status", "Status", "select", true, ["Draft", "Sent", "Partially Paid", "Paid", "Overdue", "Cancelled"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  bills: {
+    title: "Bills & Purchases",
+    icon: "▧",
+    collection: "bills",
+    fields: [
+      ["number", "Bill Number", "text", true],
+      ["supplier", "Supplier", "text", true],
+      ["date", "Bill Date", "date", true],
+      ["dueDate", "Due Date", "date", false],
+      ["amount", "Amount", "number", true],
+      ["status", "Status", "select", true, ["Unpaid", "Partially Paid", "Paid", "Overdue"]],
+      ["category", "Category", "text", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  appointments: {
+    title: "Appointments",
+    icon: "▣",
+    collection: "appointments",
+    fields: [
+      ["title", "Appointment Title", "text", true],
+      ["person", "Customer / Person", "text", false],
+      ["date", "Date", "date", true],
+      ["time", "Time", "time", false],
+      ["status", "Status", "select", true, ["Scheduled", "Confirmed", "Completed", "Cancelled", "No Show"]],
+      ["location", "Location", "text", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  branches: {
+    title: "Branches",
+    icon: "⌂",
+    collection: "branches",
+    fields: [
+      ["name", "Branch Name", "text", true],
+      ["code", "Branch Code", "text", false],
+      ["manager", "Manager", "text", false],
+      ["phone", "Phone", "tel", false],
+      ["address", "Address", "text", false],
+      ["status", "Status", "select", true, ["Active", "Inactive"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  menuItems: {
+    title: "Menu & Items",
+    icon: "🍽",
+    collection: "menuItems",
+    fields: [
+      ["name", "Item Name", "text", true],
+      ["category", "Menu Category", "text", true],
+      ["price", "Selling Price", "number", true],
+      ["cost", "Unit Cost", "number", false],
+      ["available", "Availability", "select", true, ["Available", "Unavailable"]],
+      ["ingredients", "Ingredients / Notes", "textarea", false]
+    ]
+  },
+
+  orders: {
+    title: "Orders",
+    icon: "🧾",
+    collection: "orders",
+    fields: [
+      ["number", "Order Number", "text", true],
+      ["date", "Order Date", "date", true],
+      ["customer", "Customer Name", "text", false],
+      ["table", "Table / Channel", "text", false],
+      ["items", "Items Summary", "textarea", true],
+      ["total", "Order Total", "number", true],
+      ["payment", "Payment Method", "select", true, ["Cash", "Card", "Bank Transfer", "Online", "Unpaid"]],
+      ["status", "Order Status", "select", true, ["New", "Preparing", "Ready", "Served", "Completed", "Cancelled"]]
+    ]
+  },
+
+  patients: {
+    title: "Patients",
+    icon: "🩺",
+    collection: "patients",
+    fields: [
+      ["name", "Patient Name", "text", true],
+      ["patientId", "Patient ID", "text", false],
+      ["phone", "Phone", "tel", false],
+      ["email", "Email", "email", false],
+      ["birthDate", "Date of Birth", "date", false],
+      ["bloodGroup", "Blood Group", "select", false, ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]],
+      ["allergies", "Allergies / Notes", "textarea", false]
+    ]
+  },
+
+  prescriptions: {
+    title: "Prescriptions",
+    icon: "💊",
+    collection: "prescriptions",
+    fields: [
+      ["patient", "Patient Name / ID", "text", true],
+      ["date", "Prescription Date", "date", true],
+      ["clinician", "Clinician", "text", false],
+      ["medicines", "Medicines / Instructions", "textarea", true],
+      ["followUp", "Follow-up Date", "date", false],
+      ["status", "Status", "select", true, ["Active", "Completed", "Cancelled"]]
+    ]
+  },
+
+  students: {
+    title: "Students",
+    icon: "🎓",
+    collection: "students",
+    fields: [
+      ["name", "Student Name", "text", true],
+      ["studentId", "Student ID", "text", false],
+      ["className", "Class / Course", "text", true],
+      ["guardian", "Parent / Guardian", "text", false],
+      ["phone", "Contact Number", "tel", false],
+      ["enrolDate", "Enrolment Date", "date", false],
+      ["fee", "Course Fee", "number", false],
+      ["status", "Status", "select", true, ["Active", "On Hold", "Graduated", "Withdrawn"]]
+    ]
+  },
+
+  classes: {
+    title: "Classes & Attendance",
+    icon: "📚",
+    collection: "classes",
+    fields: [
+      ["title", "Class / Session", "text", true],
+      ["date", "Date", "date", true],
+      ["time", "Start Time", "time", false],
+      ["teacher", "Teacher", "text", false],
+      ["className", "Class / Course", "text", true],
+      ["attendance", "Attendance Count", "number", false],
+      ["status", "Status", "select", true, ["Scheduled", "Completed", "Cancelled"]]
+    ]
+  },
+
+  siteProjects: {
+    title: "Construction Projects",
+    icon: "🏗",
+    collection: "siteProjects",
+    fields: [
+      ["name", "Project / Site Name", "text", true],
+      ["client", "Client", "text", false],
+      ["location", "Site Location", "text", false],
+      ["startDate", "Start Date", "date", false],
+      ["dueDate", "Target Completion", "date", false],
+      ["budget", "Approved Budget", "number", true],
+      ["spent", "Cost to Date", "number", false],
+      ["progress", "Progress (%)", "number", false],
+      ["status", "Status", "select", true, ["Planning", "In Progress", "On Hold", "Completed"]]
+    ]
+  },
+
+  materials: {
+    title: "Materials & Labour",
+    icon: "🧱",
+    collection: "materials",
+    fields: [
+      ["name", "Material / Labour Item", "text", true],
+      ["site", "Project / Site", "text", false],
+      ["quantity", "Quantity", "number", true],
+      ["unit", "Unit", "text", false],
+      ["unitCost", "Unit Cost", "number", true],
+      ["date", "Entry Date", "date", true],
+      ["supplier", "Supplier / Contractor", "text", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  production: {
+    title: "Production Runs",
+    icon: "⚙",
+    collection: "production",
+    fields: [
+      ["batch", "Batch Number", "text", true],
+      ["product", "Product", "text", true],
+      ["date", "Production Date", "date", true],
+      ["plannedQty", "Planned Quantity", "number", false],
+      ["producedQty", "Produced Quantity", "number", true],
+      ["wasteQty", "Waste Quantity", "number", false],
+      ["status", "Status", "select", true, ["Planned", "In Progress", "Completed", "Cancelled"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  properties: {
+    title: "Properties",
+    icon: "🏠",
+    collection: "properties",
+    fields: [
+      ["name", "Property Name", "text", true],
+      ["type", "Property Type", "select", true, ["House", "Apartment", "Commercial", "Land", "Office", "Other"]],
+      ["location", "Location", "text", true],
+      ["price", "Asking Price", "number", true],
+      ["bedrooms", "Bedrooms", "number", false],
+      ["area", "Area / Size", "text", false],
+      ["status", "Status", "select", true, ["Available", "Reserved", "Sold", "Rented"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  deals: {
+    title: "Real Estate Deals",
+    icon: "🤝",
+    collection: "deals",
+    fields: [
+      ["name", "Deal Name", "text", true],
+      ["client", "Client", "text", true],
+      ["property", "Property", "text", false],
+      ["amount", "Deal Value", "number", true],
+      ["date", "Deal Date", "date", false],
+      ["status", "Status", "select", true, ["New", "Negotiation", "Contract", "Completed", "Cancelled"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  fleet: {
+    title: "Fleet Vehicles",
+    icon: "🚚",
+    collection: "fleet",
+    fields: [
+      ["vehicle", "Vehicle Name / Model", "text", true],
+      ["registration", "Registration Number", "text", true],
+      ["driver", "Assigned Driver", "text", false],
+      ["lastService", "Last Service", "date", false],
+      ["nextService", "Next Service", "date", false],
+      ["status", "Status", "select", true, ["Available", "On Trip", "Maintenance", "Inactive"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  trips: {
+    title: "Trips & Deliveries",
+    icon: "🛣",
+    collection: "trips",
+    fields: [
+      ["number", "Trip Number", "text", true],
+      ["date", "Trip Date", "date", true],
+      ["origin", "Origin", "text", true],
+      ["destination", "Destination", "text", true],
+      ["driver", "Driver", "text", false],
+      ["vehicle", "Vehicle", "text", false],
+      ["revenue", "Trip Revenue", "number", false],
+      ["cost", "Trip Cost", "number", false],
+      ["status", "Status", "select", true, ["Scheduled", "In Transit", "Delivered", "Cancelled"]]
+    ]
+  },
+
+  crops: {
+    title: "Fields & Crops",
+    icon: "🌱",
+    collection: "crops",
+    fields: [
+      ["name", "Field / Crop Name", "text", true],
+      ["area", "Area / Size", "text", false],
+      ["plantDate", "Planting Date", "date", false],
+      ["expectedHarvest", "Expected Harvest", "date", false],
+      ["season", "Season", "text", false],
+      ["status", "Status", "select", true, ["Planned", "Growing", "Harvested", "Inactive"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  farmInputs: {
+    title: "Farm Inputs & Harvest",
+    icon: "🌾",
+    collection: "farmInputs",
+    fields: [
+      ["name", "Input / Harvest Item", "text", true],
+      ["type", "Record Type", "select", true, ["Seed", "Fertilizer", "Water", "Pesticide", "Harvest", "Other"]],
+      ["date", "Date", "date", true],
+      ["quantity", "Quantity", "number", false],
+      ["cost", "Cost", "number", false],
+      ["revenue", "Revenue", "number", false],
+      ["field", "Field / Crop", "text", false],
+      ["notes", "Notes", "textarea", false]
+    ]
+  },
+
+  serviceJobs: {
+    title: "Service Jobs",
+    icon: "🛠",
+    collection: "serviceJobs",
+    fields: [
+      ["title", "Job Title", "text", true],
+      ["customer", "Customer", "text", true],
+      ["date", "Job Date", "date", true],
+      ["assignedTo", "Assigned To", "text", false],
+      ["amount", "Service Amount", "number", false],
+      ["status", "Status", "select", true, ["New", "Scheduled", "In Progress", "Completed", "Cancelled"]],
+      ["notes", "Notes", "textarea", false]
+    ]
+  }
+};
+
+const BUSINESS_TYPES = {
+  general: {
+    title: "General Business",
+    color: "#5794ff",
+    modules: ["transactions", "customers", "suppliers", "inventory", "projects", "invoices", "bills", "appointments", "branches"]
+  },
+  retail: {
+    title: "Retail & Shop",
+    color: "#a47aff",
+    modules: ["transactions", "inventory", "customers", "suppliers", "invoices", "bills", "branches"]
+  },
+  restaurant: {
+    title: "Restaurant & Cafe",
+    color: "#ff9b65",
+    modules: ["transactions", "menuItems", "orders", "inventory", "customers", "suppliers", "invoices", "bills"]
+  },
+  services: {
+    title: "Services Business",
+    color: "#45d6e8",
+    modules: ["transactions", "serviceJobs", "customers", "appointments", "projects", "invoices", "bills"]
+  },
+  healthcare: {
+    title: "Healthcare & Clinic",
+    color: "#39d6a2",
+    modules: ["transactions", "patients", "prescriptions", "appointments", "inventory", "invoices", "bills"]
+  },
+  education: {
+    title: "Education & Institute",
+    color: "#f2c46d",
+    modules: ["transactions", "students", "classes", "customers", "invoices", "bills", "appointments"]
+  },
+  construction: {
+    title: "Construction",
+    color: "#ff9b65",
+    modules: ["transactions", "siteProjects", "materials", "suppliers", "customers", "invoices", "bills"]
+  },
+  manufacturing: {
+    title: "Manufacturing",
+    color: "#a47aff",
+    modules: ["transactions", "production", "inventory", "suppliers", "customers", "invoices", "bills"]
+  },
+  realestate: {
+    title: "Real Estate",
+    color: "#45d6e8",
+    modules: ["transactions", "properties", "deals", "customers", "appointments", "invoices", "bills"]
+  },
+  transport: {
+    title: "Transport & Logistics",
+    color: "#5794ff",
+    modules: ["transactions", "fleet", "trips", "customers", "suppliers", "invoices", "bills"]
+  },
+  agriculture: {
+    title: "Agriculture & Farming",
+    color: "#39d6a2",
+    modules: ["transactions", "crops", "farmInputs", "inventory", "suppliers", "customers", "bills"]
+  }
+};
+
+const configPages = [
+  ["settings", "⚙", "Business Settings"],
+  ["workspaces", "▣", "Business Categories"],
+  ["backup", "⇩", "Data Backup"]
+];
+
+function notify(message, error = false) {
+  const root = $("#toastRoot");
+  if (!root) return;
+  root.innerHTML = `<div class="toast ${error ? "error" : ""}">${esc(message)}</div>`;
+  setTimeout(() => {
+    if (root.firstElementChild) root.innerHTML = "";
+  }, 4000);
 }
-async function saveSettings(e){
- e.preventDefault();const fd=new FormData(e.currentTarget);const patch={businessName:String(fd.get("businessName")||"My Business").trim(),currency:String(fd.get("currency")||"USD"),taxRate:Number(fd.get("taxRate")||0),dateFormat:String(fd.get("dateFormat")||"local"),updatedAt:serverTimestamp()};
- try{await setDoc(userDoc(),{uid:state.user.uid,email:state.user.email||"",name:state.profile?.name||state.user.displayName||"NEXORA User",role:state.profile?.role||"user",plan:state.profile?.plan||"free",...patch},{merge:true});state.settings={...state.settings,...patch};state.profile={...state.profile,...patch};notify("Business preferences saved.");renderPage()}catch(err){notify(friendlyError(err),true)}
+
+function friendlyError(error) {
+  const code = error?.code || "";
+  const messages = {
+    "auth/email-already-in-use": "This email already has an account. Please sign in instead.",
+    "auth/invalid-email": "Please enter a valid email address.",
+    "auth/weak-password": "Choose a password with at least 6 characters.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+    "auth/user-not-found": "No account was found for this email.",
+    "auth/wrong-password": "Email or password is incorrect.",
+    "auth/popup-closed-by-user": "The Google sign-in window was closed.",
+    "permission-denied": "Firebase denied this request. Check Firestore rules and account access.",
+    "unavailable": "The service is temporarily unavailable. Please try again."
+  };
+  return messages[code] || error?.message || "Something went wrong. Please try again.";
 }
-function exportBackup(){
- const payload={app:"NEXORA",version:VERSION,exportedAt:new Date().toISOString(),workspace:state.workspaceId,settings:state.settings,records:Object.fromEntries(Object.entries(state.records).filter(([k])=>k!=="workspaces"))};
- download(`nexora-backup-${isoToday()}.json`,JSON.stringify(payload,(k,v)=>v?.toDate?v.toDate().toISOString():v,2),"application/json");notify("JSON backup exported.");
+
+function showAuthMessage(message, error = false) {
+  const box = $("#authMessage");
+  box.textContent = message;
+  box.classList.remove("hidden");
+  box.style.borderColor = error ? "#a34459" : "#3a527a";
 }
-function bindDynamicEvents(){
- $("#pageContent").onclick=async e=>{
-  const btn=e.target.closest("button");if(!btn)return;
-  if(btn.dataset.add){openRecordModal(btn.dataset.add);return}
-  if(btn.dataset.edit){const [n,id]=btn.dataset.edit.split(":");openRecordModal(n,id);return}
-  if(btn.dataset.delete){const [n,id]=btn.dataset.delete.split(":");deleteRecord(n,id);return}
-  if(btn.dataset.export){exportCSV(btn.dataset.export);return}
-  if(btn.dataset.goto){navTo(btn.dataset.goto);return}
-  if(btn.dataset.switchWorkspace){state.workspaceId=btn.dataset.switchWorkspace;await loadAll();navTo("dashboard");notify("Workspace switched.");return}
-  if(btn.id==="runImport"){importCSV();return}
- };
- $("#pageContent").oninput=e=>{if(e.target.id==="moduleSearch"){state.search=e.target.value;const pos=e.target.selectionStart;renderPage();const input=$("#moduleSearch");if(input){input.focus();input.setSelectionRange(pos,pos)}}};
- $("#pageContent").onsubmit=e=>{if(e.target.id==="settingsForm")saveSettings(e)};
- $("#pageContent").onclick=async e=>{
-  const btn=e.target.closest("button");if(!btn)return;
-  if(btn.dataset.add){openRecordModal(btn.dataset.add);return}
-  if(btn.dataset.edit){const [n,id]=btn.dataset.edit.split(":");openRecordModal(n,id);return}
-  if(btn.dataset.delete){const [n,id]=btn.dataset.delete.split(":");deleteRecord(n,id);return}
-  if(btn.dataset.export){exportCSV(btn.dataset.export);return}
-  if(btn.dataset.goto){navTo(btn.dataset.goto);return}
-  if(btn.dataset.switchWorkspace){state.workspaceId=btn.dataset.switchWorkspace;await loadAll();navTo("dashboard");notify("Workspace switched.");return}
-  if(btn.id==="runImport"){importCSV();return}
-  if(btn.id==="exportBackup")exportBackup();
- };
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const register = mode === "register";
+  $("#authHeading").textContent = register ? "Create your account" : "Welcome back";
+  $("#authDescription").textContent = register
+    ? "Set up your NEXORA account and manage your business."
+    : "Sign in to manage your business from one command center.";
+  $("#nameField").classList.toggle("hidden", !register);
+  $("#authName").required = register;
+  $("#authSubmit").textContent = register ? "Create Account" : "Sign In";
+  $("#showLogin").classList.toggle("primary", !register);
+  $("#showRegister").classList.toggle("primary", register);
+  $("#forgotPassword").classList.toggle("hidden", register);
+  $("#authMessage").classList.add("hidden");
 }
-function installAppEvents(){
- $("#authForm").addEventListener("submit",handleAuth);
- $("#showLogin").onclick=()=>setAuthMode("login");$("#showRegister").onclick=()=>setAuthMode("register");
- $("#forgotPassword").onclick=async()=>{const email=$("#authEmail").value.trim();if(!email)return showAuthMessage("Enter your email address first.",true);try{await sendPasswordResetEmail(auth,email);showAuthMessage("Password reset email sent. Check your inbox.")}catch(e){showAuthMessage(friendlyError(e),true)}};
- $("#signOutBtn").onclick=()=>signOut(auth);
- $("#menuToggle").onclick=()=>$("#sidebar").classList.toggle("open");
- $("#quickAddBtn").onclick=()=>openRecordModal(state.page in modules?state.page:"transactions");
- $("#workspaceSelect").onchange=async e=>{state.workspaceId=e.target.value;await loadAll();navTo("dashboard")};
- $("#globalSearch").oninput=e=>{state.search=e.target.value;if(modules[state.page])renderPage()};
- $("#mainNav").onclick=e=>{const b=e.target.closest("[data-page]");if(b)navTo(b.dataset.page)};
- $$(".sidebar [data-page]").forEach(b=>b.addEventListener("click",()=>navTo(b.dataset.page)));
- $("#pageContent").addEventListener("click",e=>{if(e.target.id==="exportBackup")exportBackup()});
+
+async function handleAuth(event) {
+  event.preventDefault();
+  const button = $("#authSubmit");
+  const email = $("#authEmail").value.trim();
+  const password = $("#authPassword").value;
+  button.disabled = true;
+  button.textContent = "Please wait…";
+
+  try {
+    if (state.authMode === "register") {
+      const name = $("#authName").value.trim();
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(credential.user, { displayName: name });
+
+      await setDoc(doc(db, "users", credential.user.uid), {
+        uid: credential.user.uid,
+        name,
+        email,
+        role: "user",
+        plan: "free",
+        businessName: "My Business",
+        defaultBusinessType: "general",
+        currency: "PKR",
+        taxRate: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      notify("Account created successfully.");
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+    }
+  } catch (error) {
+    showAuthMessage(friendlyError(error), true);
+  } finally {
+    button.disabled = false;
+    button.textContent = state.authMode === "register" ? "Create Account" : "Sign In";
+  }
 }
-async function showApp(){
- $("#authView").classList.add("hidden");$("#appView").classList.remove("hidden");
- $("#userName").textContent=state.profile?.name||"NEXORA User";$("#userEmail").textContent=state.user.email||"";$("#userAvatar").textContent=(state.profile?.name||state.user.email||"N").charAt(0).toUpperCase();
- await loadAll();navTo("dashboard");
+
+async function ensureProfile(user) {
+  const ref = doc(db, "users", user.uid);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      uid: user.uid,
+      name: user.displayName || "NEXORA User",
+      email: user.email || "",
+      role: "user",
+      plan: "free",
+      businessName: "My Business",
+      defaultBusinessType: "general",
+      currency: "PKR",
+      taxRate: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    state.profile = {};
+  } else {
+    state.profile = snap.data();
+  }
+
+  state.settings = {
+    ...state.settings,
+    ...state.profile
+  };
+
+  state.settings.currency ||= "PKR";
 }
-onAuthStateChanged(auth,async user=>{
- state.user=user;
- if(!user){$("#appView").classList.add("hidden");$("#authView").classList.remove("hidden");return}
- try{await ensureProfile(user);await showApp()}catch(e){notify(friendlyError(e),true);$("#authView").classList.remove("hidden");$("#appView").classList.add("hidden")}
+
+function businessType() {
+  const selected = state.workspaces.find(w => w.id === state.workspaceId);
+  return selected?.businessType ||
+    state.settings.defaultBusinessType ||
+    state.profile?.defaultBusinessType ||
+    "general";
+}
+
+function currentModules() {
+  return BUSINESS_TYPES[businessType()]?.modules || BUSINESS_TYPES.general.modules;
+}
+
+function renderCategoryNav() {
+  const mainNav = $("#mainNav");
+  const configNav = $("#configNav");
+  if (!mainNav || !configNav) return;
+
+  const items = [
+    ["dashboard", "◈", "Command Center"],
+    ...currentModules().map(key => [
+      key,
+      modules[key]?.icon || "•",
+      modules[key]?.title || key
+    ])
+  ];
+
+  mainNav.innerHTML = items.map(([page, icon, label]) => `
+    <button class="nav-item ${state.page === page ? "active" : ""}" data-page="${esc(page)}">
+      <span class="nav-ico">${icon}</span><span>${esc(label)}</span>
+    </button>
+  `).join("");
+
+  configNav.innerHTML = configPages.map(([page, icon, label]) => `
+    <button class="nav-item ${state.page === page ? "active" : ""}" data-page="${page}">
+      <span class="nav-ico">${icon}</span><span>${label}</span>
+    </button>
+  `).join("");
+
+  const select = $("#workspaceSelect");
+  if (select) {
+    select.innerHTML = state.workspaces.map(w =>
+      `<option value="${esc(w.id)}" ${w.id === state.workspaceId ? "selected" : ""}>${esc(w.name)}</option>`
+    ).join("");
+  }
+}
+
+async function loadWorkspaces() {
+  const snapshot = await getDocs(userCollection("workspaces"));
+  state.workspaces = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (!state.workspaces.some(w => w.id === state.workspaceId)) {
+    state.workspaceId = state.workspaces[0]?.id || "default";
+  }
+}
+
+async function loadRecords(name) {
+  const mod = modules[name];
+  if (!mod) return [];
+
+  const snapshot = await getDocs(userCollection(mod.collection));
+  const rows = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  state.records[name] = rows.filter(row =>
+    !row.workspaceId || row.workspaceId === state.workspaceId
+  );
+
+  return state.records[name];
+}
+
+async function loadAll() {
+  await loadWorkspaces();
+
+  const keys = new Set([
+    ...Object.keys(modules),
+    "workspaces"
+  ]);
+
+  for (const key of keys) {
+    if (modules[key]) await loadRecords(key);
+  }
+}
+
+function applyBusinessTheme() {
+  const config = BUSINESS_TYPES[businessType()] || BUSINESS_TYPES.general;
+  document.documentElement.style.setProperty("--blue", config.color);
+  document.documentElement.style.setProperty("--purple", config.color);
+  $("#topCrumb").textContent = `${config.title} · Workspace`;
+}
+
+function navTo(page) {
+  state.page = page;
+  state.search = "";
+  $("#globalSearch").value = "";
+  $("#sidebar").classList.remove("open");
+  renderCategoryNav();
+  renderPage();
+}
+
+function metricCard(label, value, icon, foot) {
+  return `
+    <article class="stat">
+      <div class="stat-top">
+        <span class="stat-label">${esc(label)}</span>
+        <span class="stat-icon">${icon}</span>
+      </div>
+      <div class="stat-value">${esc(value)}</div>
+      <div class="stat-foot">${esc(foot)}</div>
+    </article>
+  `;
+}
+
+function dashboardPage() {
+  const rows = state.records.transactions || [];
+  const inventory = state.records.inventory || [];
+  const invoices = state.records.invoices || [];
+  const income = rows.filter(r => r.type === "Income")
+    .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const expenses = rows.filter(r => r.type === "Expense")
+    .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const lowStock = inventory.filter(r =>
+    Number(r.quantity || 0) <= Number(r.minStock || 0)
+  ).length;
+  const revenue = invoices.filter(r => r.status !== "Cancelled")
+    .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+  const config = BUSINESS_TYPES[businessType()] || BUSINESS_TYPES.general;
+  const totalRecords = currentModules().reduce(
+    (sum, key) => sum + (state.records[key] || []).length, 0
+  );
+
+  const stats = [
+    ["Income", money(income), "↗", "Recorded income"],
+    ["Expenses", money(expenses), "↘", "Recorded expenses"],
+    ["Net Result", money(income - expenses), "◈", "Income minus expenses"],
+    ["Records", String(totalRecords), "▦", `${config.title} workspace`]
+  ];
+
+  if (businessType() === "retail" || businessType() === "restaurant") {
+    stats[0] = ["Sales Revenue", money(revenue || income), "↗", "Invoices and recorded income"];
+    stats[3] = ["Low Stock", String(lowStock), "▦", "Inventory reorder checks"];
+  }
+
+  if (businessType() === "healthcare") {
+    stats[0] = ["Patients", String((state.records.patients || []).length), "🩺", "Patient directory"];
+    stats[3] = ["Appointments", String((state.records.appointments || []).length), "▣", "Appointment records"];
+  }
+
+  if (businessType() === "education") {
+    stats[0] = ["Students", String((state.records.students || []).length), "🎓", "Student directory"];
+    stats[3] = ["Classes", String((state.records.classes || []).length), "📚", "Class records"];
+  }
+
+  if (businessType() === "construction") {
+    stats[0] = ["Projects", String((state.records.siteProjects || []).length), "🏗", "Construction sites"];
+    stats[3] = ["Materials", String((state.records.materials || []).length), "🧱", "Material entries"];
+  }
+
+  if (businessType() === "manufacturing") {
+    stats[0] = ["Production Runs", String((state.records.production || []).length), "⚙", "Recorded batches"];
+    stats[3] = ["Stock Items", String(inventory.length), "▦", "Inventory catalogue"];
+  }
+
+  if (businessType() === "realestate") {
+    stats[0] = ["Properties", String((state.records.properties || []).length), "🏠", "Property listings"];
+    stats[3] = ["Deals", String((state.records.deals || []).length), "🤝", "Sales pipeline"];
+  }
+
+  if (businessType() === "transport") {
+    stats[0] = ["Fleet Vehicles", String((state.records.fleet || []).length), "🚚", "Vehicles tracked"];
+    stats[3] = ["Trips", String((state.records.trips || []).length), "🛣", "Trip records"];
+  }
+
+  if (businessType() === "agriculture") {
+    stats[0] = ["Fields / Crops", String((state.records.crops || []).length), "🌱", "Crop records"];
+    stats[3] = ["Farm Inputs", String((state.records.farmInputs || []).length), "🌾", "Farm activity"];
+  }
+
+  const chart = [
+    ["Income", income],
+    ["Expenses", expenses],
+    ["Invoices", revenue]
+  ];
+  const max = Math.max(1, ...chart.map(item => item[1]));
+
+  const recent = currentModules()
+    .flatMap(key => (state.records[key] || []).map(row => ({
+      ...row,
+      moduleTitle: modules[key].title
+    })))
+    .slice(0, 7);
+
+  return `
+    <div class="welcome">
+      <div>
+        <div class="eyebrow">${esc(config.title)}</div>
+        <h1>Welcome to your Command Center</h1>
+        <p>Monitor your operations and manage your business in one place.</p>
+      </div>
+      <button class="btn primary" data-add="${esc(currentModules()[0] || "transactions")}">＋ Add Record</button>
+    </div>
+
+    <div class="grid stats">
+      ${stats.map(s => metricCard(...s)).join("")}
+    </div>
+
+    <div class="grid two-col">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Business Overview</div>
+            <div class="panel-sub">Recorded financial activity</div>
+          </div>
+          <span class="status">Overview</span>
+        </div>
+
+        <div class="chart">
+          ${chart.map(([label, value]) => `
+            <div class="bar-wrap">
+              <div class="bar" title="${esc(money(value))}"
+                style="height:${Math.max(3, value / max * 85)}%"></div>
+              <div class="bar-label">${esc(label)}</div>
+            </div>
+          `).join("")}
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--blue)"></i>Recorded values</span>
+          <span>${esc(money(income - expenses))} net result</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Quick Actions</div>
+            <div class="panel-sub">Open a business module</div>
+          </div>
+        </div>
+        <div class="list">
+          ${currentModules().slice(0, 5).map(key => `
+            <div class="list-row">
+              <div class="list-main">
+                <div class="list-name">${modules[key].icon} ${esc(modules[key].title)}</div>
+                <div class="list-meta">${(state.records[key] || []).length} record(s)</div>
+              </div>
+              <button class="btn" data-goto="${key}">Open →</button>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:18px">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Workspace Information</div>
+          <div class="panel-sub">Current business configuration</div>
+        </div>
+        <button class="btn" data-goto="workspaces">Manage Categories</button>
+      </div>
+      <div class="grid section-grid">
+        <div class="feature-card">
+          <div class="stat-icon">◈</div>
+          <h3>${esc(state.settings.businessName || "My Business")}</h3>
+          <p>Business name and financial preferences can be changed in settings.</p>
+        </div>
+        <div class="feature-card">
+          <div class="stat-icon">▦</div>
+          <h3>${esc(config.title)}</h3>
+          <p>Your sidebar shows modules selected for this business category.</p>
+        </div>
+        <div class="feature-card">
+          <div class="stat-icon">⇩</div>
+          <h3>Data Backup</h3>
+          <p>Export your records as CSV files or a JSON backup.</p>
+          <button class="btn" id="exportBackup" style="margin-top:12px">Export Backup</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:18px">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Recent Records</div>
+          <div class="panel-sub">Latest items from the current workspace</div>
+        </div>
+      </div>
+      ${recent.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Module</th><th>Record</th><th>Status / Type</th></tr></thead>
+            <tbody>
+              ${recent.map(r => `
+                <tr>
+                  <td>${esc(r.moduleTitle)}</td>
+                  <td>${esc(r.name || r.title || r.description || r.number || r.batch || r.vehicle || "Record")}</td>
+                  <td>${esc(r.status || r.type || "Saved")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : `<div class="empty">No records yet. Use Quick Add to create your first record.</div>`}
+    </section>
+  `;
+}
+
+function formatValue(key, value, row) {
+  if (value === undefined || value === null || value === "") return "—";
+
+  if ([
+    "amount", "price", "cost", "revenue", "total", "budget",
+    "spent", "fee", "value", "unitCost"
+  ].includes(key)) return money(value);
+
+  if ([
+    "date", "dueDate", "issueDate", "startDate", "expiry",
+    "birthDate", "enrolDate", "followUp", "plantDate",
+    "expectedHarvest", "lastService", "nextService"
+  ].includes(key)) return dateText(value);
+
+  if (key === "quantity" && Number(value) <= Number(row.minStock || 0)) {
+    return `<span class="negative">${esc(value)}</span>`;
+  }
+
+  return esc(value);
+}
+
+function modulePage(name) {
+  const mod = modules[name];
+  if (!mod) return dashboardPage();
+
+  const search = state.search.toLowerCase();
+  const rows = (state.records[name] || []).filter(row =>
+    Object.values(row).some(value =>
+      String(value ?? "").toLowerCase().includes(search)
+    )
+  );
+
+  const columns = mod.fields.slice(0, 5);
+
+  return `
+    <div class="welcome">
+      <div>
+        <div class="eyebrow">${esc(BUSINESS_TYPES[businessType()]?.title || "Business")}</div>
+        <h1>${esc(mod.title)}</h1>
+        <p>Manage your ${esc(mod.title.toLowerCase())} records.</p>
+      </div>
+    </div>
+
+    <div class="page-toolbar">
+      <div class="toolbar-left">
+        <input class="filter" id="moduleSearch" placeholder="Filter records…" value="${esc(state.search)}">
+        <span class="status">${rows.length} record(s)</span>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn" data-export="${esc(name)}">Export CSV</button>
+        <button class="btn primary" data-add="${esc(name)}">＋ Add New</button>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="table-wrap">
+        ${rows.length ? `
+          <table>
+            <thead>
+              <tr>
+                ${columns.map(f => `<th>${esc(f[1])}</th>`).join("")}
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr>
+                  ${columns.map(f => `<td>${formatValue(f[0], row[f[0]], row)}</td>`).join("")}
+                  <td>
+                    <div class="table-actions">
+                      <button class="icon-btn" data-edit="${name}:${row.id}">Edit</button>
+                      <button class="icon-btn" data-delete="${name}:${row.id}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        ` : `<div class="empty">No records found. Click Add New to create a record.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function settingsPage() {
+  return `
+    <div class="welcome">
+      <div>
+        <div class="eyebrow">CONFIGURATION</div>
+        <h1>Business Settings</h1>
+        <p>Update your business profile and currency preferences.</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <form id="settingsForm">
+        <div class="form-grid">
+          <div class="field">
+            <label>BUSINESS NAME</label>
+            <input name="businessName" required value="${esc(state.settings.businessName || "")}">
+          </div>
+          <div class="field">
+            <label>CURRENCY</label>
+            <select name="currency">
+              ${["PKR", "USD", "GBP", "EUR", "AED", "SAR", "INR"].map(c =>
+                `<option value="${c}" ${state.settings.currency === c ? "selected" : ""}>${c}</option>`
+              ).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>DEFAULT TAX RATE (%)</label>
+            <input type="number" name="taxRate" min="0" max="100" value="${Number(state.settings.taxRate || 0)}">
+          </div>
+          <div class="field">
+            <label>DEFAULT BUSINESS CATEGORY</label>
+            <select name="defaultBusinessType">
+              ${Object.entries(BUSINESS_TYPES).map(([key, item]) =>
+                `<option value="${key}" ${(state.settings.defaultBusinessType || "general") === key ? "selected" : ""}>${esc(item.title)}</option>`
+              ).join("")}
+            </select>
+          </div>
+        </div>
+        <button class="btn primary" type="submit">Save Settings</button>
+      </form>
+    </section>
+  `;
+}
+
+function workspacesPage() {
+  return `
+    <div class="welcome">
+      <div>
+        <div class="eyebrow">BUSINESS CATEGORIES</div>
+        <h1>Choose Your Business</h1>
+        <p>Switch your workspace interface to the relevant business modules.</p>
+      </div>
+    </div>
+
+    <div class="grid section-grid">
+      ${Object.entries(BUSINESS_TYPES).map(([key, item]) => {
+        const workspace = state.workspaces.find(w => w.businessType === key);
+        const active = businessType() === key;
+        return `
+          <article class="feature-card">
+            <div class="stat-icon" style="color:${item.color}">◈</div>
+            <h3>${esc(item.title)}</h3>
+            <p>${item.modules.length} relevant modules for this category.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+              ${workspace
+                ? `<button class="btn ${active ? "good" : ""}" data-switch-workspace="${esc(workspace.id)}">${active ? "Current Workspace" : "Switch Workspace"}</button>`
+                : `<button class="btn primary" data-create-workspace="${key}">Create Workspace</button>`
+              }
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+
+    <div class="notice" style="margin-top:18px">
+      Each category changes the available modules and dashboard labels. Records are stored under your signed-in account. This is not a team-sharing or multi-user permission system.
+    </div>
+  `;
+}
+
+function backupPage() {
+  return `
+    <div class="welcome">
+      <div>
+        <div class="eyebrow">DATA MANAGEMENT</div>
+        <h1>Backup & Export</h1>
+        <p>Keep an offline copy of your business data.</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="feature-card">
+        <div class="stat-icon">⇩</div>
+        <h3>Full JSON Backup</h3>
+        <p>Export records loaded for your current workspace as a JSON file.</p>
+        <button class="btn primary" id="exportBackup" style="margin-top:14px">Export JSON Backup</button>
+      </div>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
+
+      <h3>Import CSV Records</h3>
+      <p class="muted small">Choose the module and a CSV file with matching field names.</p>
+
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>MODULE</label>
+          <select id="importModule">
+            ${currentModules().map(key => `<option value="${key}">${esc(modules[key].title)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>CSV FILE</label>
+          <input id="importFile" type="file" accept=".csv,text/csv">
+        </div>
+      </div>
+      <button class="btn primary" id="runImport">Import CSV</button>
+    </section>
+  `;
+}
+
+function renderPage() {
+  const titleMap = {
+    dashboard: "Command Center",
+    settings: "Business Settings",
+    workspaces: "Business Categories",
+    backup: "Data Backup"
+  };
+
+  $("#topTitle").textContent =
+    titleMap[state.page] || modules[state.page]?.title || "NEXORA";
+
+  if (modules[state.page]) {
+    $("#topCrumb").textContent = `${BUSINESS_TYPES[businessType()]?.title || "Business"} · ${modules[state.page].title}`;
+  }
+
+  const content = $("#pageContent");
+
+  if (state.page === "dashboard") content.innerHTML = dashboardPage();
+  else if (state.page === "settings") content.innerHTML = settingsPage();
+  else if (state.page === "workspaces") content.innerHTML = workspacesPage();
+  else if (state.page === "backup") content.innerHTML = backupPage();
+  else content.innerHTML = modulePage(state.page);
+
+  bindPageEvents();
+}
+
+function fieldControl(field, record = {}) {
+  const [key, label, type, required, options] = field;
+  const value = record[key] ?? "";
+  const req = required ? "required" : "";
+
+  if (type === "select") {
+    return `
+      <div class="field">
+        <label>${esc(label.toUpperCase())}</label>
+        <select name="${key}" ${req}>
+          <option value="">Choose…</option>
+          ${(options || []).map(option =>
+            `<option value="${esc(option)}" ${String(value) === option ? "selected" : ""}>${esc(option)}</option>`
+          ).join("")}
+        </select>
+      </div>
+    `;
+  }
+
+  if (type === "textarea") {
+    return `
+      <div class="field span-2">
+        <label>${esc(label.toUpperCase())}</label>
+        <textarea name="${key}" ${req}>${esc(value)}</textarea>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="field">
+      <label>${esc(label.toUpperCase())}</label>
+      <input name="${key}" type="${type}" value="${esc(value)}" ${req}
+        ${type === "number" ? 'step="any"' : ""}>
+    </div>
+  `;
+}
+
+function openModal(title, body, saveHandler) {
+  $("#modalRoot").innerHTML = `
+    <div class="modal-backdrop" id="modalBackdrop">
+      <section class="modal">
+        <div class="modal-head">
+          <h3>${esc(title)}</h3>
+          <button class="icon-btn" id="modalClose">×</button>
+        </div>
+        <div class="modal-body">${body}</div>
+        <div class="modal-foot">
+          <button class="btn" id="modalCancel">Cancel</button>
+          <button class="btn primary" id="modalSave">Save</button>
+        </div>
+      </section>
+    </div>
+  `;
+
+  const close = () => { $("#modalRoot").innerHTML = ""; };
+  $("#modalClose").onclick = close;
+  $("#modalCancel").onclick = close;
+
+  $("#modalBackdrop").onclick = event => {
+    if (event.target.id === "modalBackdrop") close();
+  };
+
+  $("#modalSave").onclick = async () => {
+    const form = $("#recordForm");
+    if (form && !form.reportValidity()) return;
+
+    const button = $("#modalSave");
+    button.disabled = true;
+    button.textContent = "Saving…";
+
+    try {
+      await saveHandler(form);
+      close();
+    } catch (error) {
+      notify(friendlyError(error), true);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+  };
+}
+
+function openRecordModal(name, id = null) {
+  const mod = modules[name];
+  if (!mod) return;
+
+  const record = id
+    ? (state.records[name] || []).find(item => item.id === id) || {}
+    : {};
+
+  openModal(
+    `${id ? "Edit" : "Add"} ${mod.title}`,
+    `<form id="recordForm"><div class="form-grid">${mod.fields.map(field => fieldControl(field, record)).join("")}</div></form>`,
+    async form => {
+      const formData = new FormData(form);
+      const data = {};
+
+      for (const field of mod.fields) {
+        const [key, label, type, required] = field;
+        const raw = formData.get(key);
+        const value = raw == null ? "" : String(raw).trim();
+
+        if (required && !value) {
+          throw new Error(`${label} is required.`);
+        }
+
+        data[key] = type === "number"
+          ? (value === "" ? 0 : Number(value))
+          : value;
+      }
+
+      data.workspaceId = state.workspaceId;
+      data.updatedAt = serverTimestamp();
+
+      if (id) {
+        await updateDoc(
+          doc(db, "users", state.user.uid, mod.collection, id),
+          data
+        );
+      } else {
+        await addDoc(userCollection(mod.collection), {
+          ...data,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      await loadRecords(name);
+      renderPage();
+      notify(id ? "Record updated." : "Record created.");
+    }
+  );
+}
+
+async function deleteRecord(name, id) {
+  if (!confirm("Delete this record permanently?")) return;
+
+  try {
+    const mod = modules[name];
+    await deleteDoc(doc(db, "users", state.user.uid, mod.collection, id));
+    await loadRecords(name);
+    renderPage();
+    notify("Record deleted.");
+  } catch (error) {
+    notify(friendlyError(error), true);
+  }
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text)
+    ? `"${text.replace(/"/g, '""')}"`
+    : text;
+}
+
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCSV(name) {
+  const rows = state.records[name] || [];
+  if (!rows.length) {
+    notify("There are no records to export.");
+    return;
+  }
+
+  const keys = [...new Set(rows.flatMap(row => Object.keys(row)))]
+    .filter(key => !["id", "workspaceId"].includes(key));
+
+  const csv = [
+    keys.map(csvEscape).join(","),
+    ...rows.map(row => keys.map(key => {
+      const value = row[key]?.toDate
+        ? row[key].toDate().toISOString()
+        : row[key];
+      return csvEscape(value);
+    }).join(","))
+  ].join("\r\n");
+
+  downloadFile(`${name}-${today()}.csv`, csv, "text/csv;charset=utf-8");
+  notify("CSV export ready.");
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      i++;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i++;
+      row.push(cell);
+      if (row.some(value => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  if (cell.length || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+async function importCSV() {
+  const file = $("#importFile")?.files?.[0];
+  const name = $("#importModule")?.value;
+  const mod = modules[name];
+
+  if (!file || !mod) {
+    notify("Choose a CSV file and module first.", true);
+    return;
+  }
+
+  try {
+    const rows = parseCSV(await file.text());
+    if (rows.length < 2) throw new Error("CSV has no data rows.");
+
+    const normalize = value =>
+      String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const fieldLookup = {};
+    mod.fields.forEach(field => {
+      fieldLookup[normalize(field[0])] = field[0];
+      fieldLookup[normalize(field[1])] = field[0];
+    });
+
+    const headers = rows[0].map(header => fieldLookup[normalize(header)]);
+    let imported = 0;
+
+    for (const row of rows.slice(1)) {
+      const data = {
+        workspaceId: state.workspaceId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      headers.forEach((key, index) => {
+        if (!key) return;
+        const field = mod.fields.find(item => item[0] === key);
+        const value = String(row[index] || "").trim();
+        if (value) {
+          data[key] = field?.[2] === "number" ? Number(value) : value;
+        }
+      });
+
+      const missing = mod.fields.some(field =>
+        field[3] && !String(data[field[0]] ?? "").trim()
+      );
+
+      if (!missing) {
+        await addDoc(userCollection(mod.collection), data);
+        imported++;
+      }
+    }
+
+    await loadRecords(name);
+    renderPage();
+    notify(`Imported ${imported} record(s).`);
+  } catch (error) {
+    notify(friendlyError(error), true);
+  }
+}
+
+function exportBackup() {
+  const backup = {
+    app: "NEXORA",
+    version: VERSION,
+    exportedAt: new Date().toISOString(),
+    workspaceId: state.workspaceId,
+    settings: state.settings,
+    records: state.records
+  };
+
+  downloadFile(
+    `nexora-backup-${today()}.json`,
+    JSON.stringify(backup, (key, value) =>
+      value?.toDate ? value.toDate().toISOString() : value, 2),
+    "application/json"
+  );
+
+  notify("JSON backup exported.");
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+
+  const form = new FormData(event.currentTarget);
+  const businessName = String(form.get("businessName") || "My Business").trim();
+  const currency = String(form.get("currency") || "PKR");
+  const taxRate = Number(form.get("taxRate") || 0);
+  const defaultBusinessType = String(form.get("defaultBusinessType") || "general");
+
+  try {
+    await setDoc(userDoc(), {
+      uid: state.user.uid,
+      name: state.profile?.name || state.user.displayName || "NEXORA User",
+      email: state.user.email || "",
+      role: state.profile?.role || "user",
+      plan: state.profile?.plan || "free",
+      businessName,
+      currency,
+      taxRate,
+      defaultBusinessType,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    state.settings = {
+      ...state.settings,
+      businessName,
+      currency,
+      taxRate,
+      defaultBusinessType
+    };
+
+    state.profile = { ...state.profile, ...state.settings };
+    applyBusinessTheme();
+    renderCategoryNav();
+    notify("Business settings saved.");
+    renderPage();
+  } catch (error) {
+    notify(friendlyError(error), true);
+  }
+}
+
+async function createWorkspace(type) {
+  const config = BUSINESS_TYPES[type];
+  if (!config) return;
+
+  const name = prompt(`Enter a name for your ${config.title} workspace:`, config.title);
+  if (!name?.trim()) return;
+
+  try {
+    const created = await addDoc(userCollection("workspaces"), {
+      name: name.trim(),
+      businessType: type,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    state.workspaceId = created.id;
+    await loadWorkspaces();
+    await loadAll();
+    applyBusinessTheme();
+    renderCategoryNav();
+    navTo("dashboard");
+    notify("Workspace created.");
+  } catch (error) {
+    notify(friendlyError(error), true);
+  }
+}
+
+function bindPageEvents() {
+  const content = $("#pageContent");
+
+  content.onclick = async event => {
+    const button = event.target.closest("button");
+    if (!button) return;
+
+    if (button.dataset.add) {
+      openRecordModal(button.dataset.add);
+      return;
+    }
+
+    if (button.dataset.edit) {
+      const index = button.dataset.edit.indexOf(":");
+      openRecordModal(button.dataset.edit.slice(0, index), button.dataset.edit.slice(index + 1));
+      return;
+    }
+
+    if (button.dataset.delete) {
+      const index = button.dataset.delete.indexOf(":");
+      deleteRecord(button.dataset.delete.slice(0, index), button.dataset.delete.slice(index + 1));
+      return;
+    }
+
+    if (button.dataset.export) {
+      exportCSV(button.dataset.export);
+      return;
+    }
+
+    if (button.dataset.goto) {
+      navTo(button.dataset.goto);
+      return;
+    }
+
+    if (button.dataset.createWorkspace) {
+      createWorkspace(button.dataset.createWorkspace);
+      return;
+    }
+
+    if (button.dataset.switchWorkspace) {
+      state.workspaceId = button.dataset.switchWorkspace;
+      await loadAll();
+      applyBusinessTheme();
+      renderCategoryNav();
+      navTo("dashboard");
+      return;
+    }
+
+    if (button.id === "exportBackup") {
+      exportBackup();
+      return;
+    }
+
+    if (button.id === "runImport") {
+      importCSV();
+    }
+  };
+
+  content.oninput = event => {
+    if (event.target.id !== "moduleSearch") return;
+
+    state.search = event.target.value;
+    const position = event.target.selectionStart;
+    renderPage();
+
+    const input = $("#moduleSearch");
+    if (input) {
+      input.focus();
+      input.setSelectionRange(position, position);
+    }
+  };
+
+  content.onsubmit = event => {
+    if (event.target.id === "settingsForm") saveSettings(event);
+  };
+}
+
+function installEvents() {
+  $("#authForm").addEventListener("submit", handleAuth);
+
+  $("#showLogin").onclick = () => setAuthMode("login");
+  $("#showRegister").onclick = () => setAuthMode("register");
+
+  $("#forgotPassword").onclick = async () => {
+    const email = $("#authEmail").value.trim();
+    if (!email) return showAuthMessage("Enter your email address first.", true);
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showAuthMessage("Password reset email sent. Check your inbox.");
+    } catch (error) {
+      showAuthMessage(friendlyError(error), true);
+    }
+  };
+
+  $("#signOutBtn").onclick = () => signOut(auth);
+  $("#menuToggle").onclick = () => $("#sidebar").classList.toggle("open");
+
+  $("#quickAddBtn").onclick = () => {
+    if (modules[state.page]) {
+      openRecordModal(state.page);
+      return;
+    }
+
+    const defaults = {
+      retail: "invoices",
+      restaurant: "orders",
+      services: "serviceJobs",
+      healthcare: "patients",
+      education: "students",
+      construction: "siteProjects",
+      manufacturing: "production",
+      realestate: "properties",
+      transport: "trips",
+      agriculture: "crops"
+    };
+
+    openRecordModal(defaults[businessType()] || "transactions");
+  };
+
+  $("#workspaceSelect").onchange = async event => {
+    state.workspaceId = event.target.value;
+    await loadAll();
+    applyBusinessTheme();
+    renderCategoryNav();
+    navTo("dashboard");
+  };
+
+  $("#globalSearch").oninput = event => {
+    state.search = event.target.value;
+    if (modules[state.page]) renderPage();
+  };
+
+  $("#sidebar").onclick = event => {
+    const button = event.target.closest("[data-page]");
+    if (button) navTo(button.dataset.page);
+  };
+}
+
+async function showApp() {
+  $("#authView").classList.add("hidden");
+  $("#appView").classList.remove("hidden");
+
+  $("#userName").textContent =
+    state.profile?.name || state.user.displayName || "NEXORA User";
+  $("#userEmail").textContent = state.user.email || "";
+  $("#userAvatar").textContent =
+    ($("#userName").textContent || "N").charAt(0).toUpperCase();
+
+  await loadAll();
+  applyBusinessTheme();
+  renderCategoryNav();
+  navTo("dashboard");
+}
+
+onAuthStateChanged(auth, async user => {
+  state.user = user;
+
+  if (!user) {
+    $("#appView").classList.add("hidden");
+    $("#authView").classList.remove("hidden");
+    return;
+  }
+
+  try {
+    await ensureProfile(user);
+    await showApp();
+  } catch (error) {
+    $("#appView").classList.add("hidden");
+    $("#authView").classList.remove("hidden");
+    showAuthMessage(friendlyError(error), true);
+  }
 });
-installAppEvents();bindDynamicEvents();setAuthMode("login");
+
+installEvents();
+setAuthMode("login");

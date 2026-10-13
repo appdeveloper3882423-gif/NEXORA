@@ -535,4 +535,4 @@ onAuthStateChanged(auth,async user=>{
     alert("NEXORA data load nahi kar saka: "+friendlyError(error));
   }
 });
-```
+

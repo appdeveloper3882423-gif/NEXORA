@@ -1,4 +1,4 @@
-```javascript
+
 import { auth, db, googleProvider } from "./firebase.js";
 
 import {

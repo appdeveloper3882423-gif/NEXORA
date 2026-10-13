@@ -535,4 +535,263 @@ onAuthStateChanged(auth,async user=>{
     alert("NEXORA data load nahi kar saka: "+friendlyError(error));
   }
 });
+/* =========================================================
+NEXORA CATEGORY ONBOARDING UPGRADE
+Existing Firebase login is preserved.
+========================================================= */
+(function () {
+const CATEGORY_CHOICES = [
+["general", "General Business", "Manage everyday business operations."],
+["retail", "Retail & Shop", "Products, stock, sales and customers."],
+["restaurant", "Restaurant & Food", "Menu, orders, supplies and customers."],
+["services", "Services & Agency", "Clients, projects and service jobs."],
+["healthcare", "Healthcare & Clinic", "Patients, appointments and prescriptions."],
+["education", "Education & Training", "Students, classes and administration."],
+["construction", "Construction", "Sites, materials and project costs."],
+["manufacturing", "Manufacturing", "Production, inventory and suppliers."],
+["realestate", "Real Estate", "Properties, deals and leads."],
+["transport", "Transport & Logistics", "Fleet, trips and deliveries."],
+["agriculture", "Agriculture & Farm", "Crops, farm inputs and stock."],
+["custom", "Custom Business", "Use a custom business category."]
+];
 
+const categoryIcons = {
+general: "◈", retail: "▣", restaurant: "♨", services: "✦",
+healthcare: "✚", education: "▤", construction: "⌂",
+manufacturing: "⚙", realestate: "⌂", transport: "⇄",
+agriculture: "♧", custom: "＋"
+};
+
+let chosenCategory = "";
+let customCategoryName = "";
+
+function addCategoryStyles() {
+if (document.getElementById("nexora-category-upgrade-css")) return;
+
+const style = document.createElement("style");
+style.id = "nexora-category-upgrade-css";
+style.textContent = `
+  #nexoraCategoryScreen {
+    position: fixed; inset: 0; z-index: 99999;
+    overflow-y: auto; padding: 28px 18px;
+    background: #080b16; color: #f4f7ff;
+    font-family: Inter, system-ui, sans-serif;
+  }
+  .nx-category-wrap { max-width: 1050px; margin: 0 auto; }
+  .nx-category-brand {
+    color: #75a7ff; font-weight: 900; letter-spacing: 3px;
+    font-size: 13px; margin-bottom: 28px;
+  }
+  .nx-category-heading { font-size: clamp(28px,5vw,44px);
+    font-weight: 850; letter-spacing: -1.5px; margin: 0 0 10px; }
+  .nx-category-description { color: #9daac4; line-height: 1.7;
+    margin: 0 0 28px; }
+  .nx-category-grid { display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+  .nx-category-card {
+    background: linear-gradient(145deg,#141d32,#0e1424);
+    border: 1px solid #263550; border-radius: 16px;
+    padding: 20px; min-height: 150px; color: #f4f7ff;
+    text-align: left; cursor: pointer; transition: .18s;
+  }
+  .nx-category-card:hover { border-color: #5794ff;
+    transform: translateY(-2px); }
+  .nx-category-card.selected {
+    border: 2px solid #5794ff;
+    background: linear-gradient(145deg,#172b4e,#111a2d);
+  }
+  .nx-category-icon { font-size: 25px; color: #75a7ff;
+    margin-bottom: 14px; }
+  .nx-category-name { font-weight: 750; font-size: 15px;
+    margin-bottom: 8px; }
+  .nx-category-desc { color: #9daac4; font-size: 12px;
+    line-height: 1.6; }
+  .nx-category-bottom { margin-top: 24px; display: flex;
+    flex-wrap: wrap; align-items: center; gap: 12px; }
+  #nxCustomCategory { display: none; margin-top: 16px; }
+  #nxCustomCategory input { width: 100%; box-sizing: border-box;
+    padding: 13px; border: 1px solid #33435f;
+    background: #101629; color: white; border-radius: 10px; }
+  #nxCategoryContinue { border: 0; border-radius: 10px;
+    background: #5794ff; color: #07101f; font-weight: 800;
+    padding: 14px 24px; cursor: pointer; }
+  #nxCategoryContinue:disabled { opacity: .45; cursor: not-allowed; }
+  #nxCategoryMessage { color: #ff9d9d; font-size: 13px; }
+  @media(max-width:760px) {
+    .nx-category-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .nx-category-card { padding: 15px; min-height: 145px; }
+  }
+  @media(max-width:420px) {
+    .nx-category-grid { grid-template-columns: 1fr; }
+  }
+`;
+document.head.appendChild(style);
+
+}
+
+function showCategoryScreen() {
+addCategoryStyles();
+
+let screen = document.getElementById("nexoraCategoryScreen");
+if (!screen) {
+  screen = document.createElement("div");
+  screen.id = "nexoraCategoryScreen";
+  document.body.appendChild(screen);
+}
+
+chosenCategory = "";
+customCategoryName = "";
+
+screen.innerHTML = `
+  <div class="nx-category-wrap">
+    <div class="nx-category-brand">N E X O R A</div>
+    <h1 class="nx-category-heading">Choose your business</h1>
+    <p class="nx-category-description">
+      Select the category that best matches your work.
+      NEXORA will personalize your workspace and navigation.
+    </p>
+    <div class="nx-category-grid">
+      ${CATEGORY_CHOICES.map(([key, name, desc]) => `
+        <button type="button" class="nx-category-card"
+          data-nx-category="${key}">
+          <div class="nx-category-icon">${categoryIcons[key]}</div>
+          <div class="nx-category-name">${name}</div>
+          <div class="nx-category-desc">${desc}</div>
+        </button>
+      `).join("")}
+    </div>
+    <div id="nxCustomCategory">
+      <label for="nxCustomCategoryName">Your business category</label>
+      <input id="nxCustomCategoryName" maxlength="60"
+        placeholder="e.g. Digital Marketing, Salon, Repair Shop">
+    </div>
+    <div class="nx-category-bottom">
+      <button type="button" id="nxCategoryContinue" disabled>
+        Continue to Workspace →
+      </button>
+      <span id="nxCategoryMessage"></span>
+    </div>
+  </div>
+`;
+
+screen.querySelectorAll("[data-nx-category]").forEach(button => {
+  button.addEventListener("click", () => {
+    chosenCategory = button.dataset.nxCategory;
+    screen.querySelectorAll(".nx-category-card").forEach(card => {
+      card.classList.toggle("selected", card === button);
+    });
+
+    const customBox = document.getElementById("nxCustomCategory");
+    customBox.style.display = chosenCategory === "custom" ? "block" : "none";
+
+    document.getElementById("nxCategoryContinue").disabled = false;
+    document.getElementById("nxCategoryMessage").textContent = "";
+  });
+});
+
+document.getElementById("nxCategoryContinue").addEventListener("click", async () => {
+  const button = document.getElementById("nxCategoryContinue");
+  const message = document.getElementById("nxCategoryMessage");
+
+  if (!window.auth || !window.db) {
+    message.textContent = "Firebase setup could not be detected.";
+    return;
+  }
+
+  customCategoryName = (
+    document.getElementById("nxCustomCategoryName")?.value || ""
+  ).trim();
+
+  if (!chosenCategory) {
+    message.textContent = "Please select a category first.";
+    return;
+  }
+
+  if (chosenCategory === "custom" && !customCategoryName) {
+    message.textContent = "Please enter your business category.";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Saving…";
+  message.textContent = "";
+
+  try {
+    if (!window.state?.user) {
+      throw new Error("Your login session is missing. Please sign in again.");
+    }
+
+    const { doc, setDoc, serverTimestamp } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+    );
+
+    const uid = window.state.user.uid;
+    const update = {
+      defaultBusinessType: chosenCategory === "custom" ? "general" : chosenCategory,
+      businessCategoryChosen: true,
+      customBusinessCategory: chosenCategory === "custom" ? customCategoryName : "",
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(window.db, "users", uid), update, { merge: true });
+
+    window.state.profile = { ...window.state.profile, ...update };
+
+    if (typeof window.loadAll === "function") {
+      await window.loadAll();
+    }
+
+    if (typeof window.applyBusinessTheme === "function") {
+      window.applyBusinessTheme();
+    }
+
+    if (typeof window.renderCategoryNav === "function") {
+      window.renderCategoryNav();
+    }
+
+    if (typeof window.navTo === "function") {
+      window.navTo("dashboard");
+    }
+
+    screen.remove();
+
+    if (chosenCategory === "custom") {
+      alert(
+        "Your custom category has been saved. Its current layout uses the General Business dashboard until a dedicated custom workflow is configured."
+      );
+    }
+  } catch (error) {
+    console.error("NEXORA category selection:", error);
+    message.textContent = error.message || "Unable to save category.";
+    button.disabled = false;
+    button.textContent = "Try Again";
+  }
+});
+
+}
+
+/*
+
+Existing profile and account stay in place.
+
+Only users who have not completed category selection see this screen.
+*/
+const originalShowApp = window.showApp;
+
+if (typeof originalShowApp === "function") {
+window.showApp = async function () {
+await originalShowApp();
+
+  const completed = window.state?.profile?.businessCategoryChosen === true;
+
+  if (!completed) {
+    showCategoryScreen();
+  } else {
+    document.getElementById("nexoraCategoryScreen")?.remove();
+  }
+};
+
+}
+
+window.nexoraChooseBusinessCategory = showCategoryScreen;
+})();

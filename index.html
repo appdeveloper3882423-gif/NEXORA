@@ -1,132 +1,112 @@
-
+```html
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#4f46e5">
-  <meta name="description" content="NEXORA — flexible business management for every industry.">
-  <title>NEXORA — Business Management</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#080d19">
+  <title>NEXORA — Business Workspace</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <div id="authScreen" class="auth-wrap">
+    <section class="auth-card">
+      <div class="brand-mark">N</div>
+      <p class="eyebrow">YOUR BUSINESS WORKSPACE</p>
+      <h1>NEXORA</h1>
+      <p class="muted">One platform. Every profession.</p>
 
-  <main id="authScreen" class="auth-screen">
-    <section class="auth-brand">
-      <a class="brand-lockup" href="#"><span class="brand-mark">N</span><span>NEXORA</span></a>
-      <div class="auth-promo">
-        <span class="eyebrow">ONE PLATFORM. MANY POSSIBILITIES.</span>
-        <h1>Your business,<br><span>beautifully organized.</span></h1>
-        <p>Manage daily operations, track performance, and keep your business moving — all in one place.</p>
-        <div class="promo-pills"><span>Smart dashboards</span><span>Cloud synced</span><span>Built for your industry</span></div>
+      <div class="field">
+        <label for="authName">Full name (for registration)</label>
+        <input id="authName" placeholder="Your name" autocomplete="name">
       </div>
-      <div class="auth-foot">NEXORA Business Suite · v2.3.0</div>
-    </section>
-    <section class="auth-panel">
-      <div class="auth-card">
-        <div class="mobile-brand brand-lockup"><span class="brand-mark">N</span><span>NEXORA</span></div>
-        <span class="eyebrow">WELCOME TO NEXORA</span>
-        <h2 id="authTitle">Welcome back</h2>
-        <p id="authSubtitle" class="muted">Sign in to continue to your workspace.</p>
-
-        <form id="authForm">
-          <div id="nameField" class="field hidden">
-            <label for="authName">Full name</label>
-            <input id="authName" autocomplete="name" placeholder="Your name">
-          </div>
-          <div class="field">
-            <label for="authEmail">Email address</label>
-            <input id="authEmail" type="email" autocomplete="email" placeholder="you@company.com" required>
-          </div>
-          <div class="field">
-            <label for="authPassword">Password</label>
-            <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
-          </div>
-          <button id="authSubmit" class="btn btn-primary btn-wide" type="submit">Sign in</button>
-        </form>
-        <button id="googleSignIn" class="btn btn-google btn-wide" type="button">
-          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.73 7.18l7.63 5.92c4.45-4.11 7.14-10.17 7.14-17.57z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.2A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.88l-7.63-5.92c-2.12 1.42-4.83 2.27-8.28 2.27-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          Continue with Google
-        </button>
-        <div class="auth-switch"><span id="authSwitchText">New to NEXORA?</span> <button id="authSwitch" class="text-button" type="button">Create account</button></div>
-        <button id="forgotPassword" class="text-button forgot-button" type="button">Forgot password?</button>
-        <p class="auth-legal">By continuing, you agree to use NEXORA responsibly and keep your account credentials secure.</p>
+      <div class="field">
+        <label for="authEmail">Email</label>
+        <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
-    </section>
-  </main>
-
-  <div id="appShell" class="app-shell hidden">
-    <aside id="sidebar" class="sidebar">
-      <div class="sidebar-top">
-        <a class="brand-lockup" href="#" aria-label="NEXORA home"><span class="brand-mark">N</span><span>NEXORA</span></a>
-        <button id="closeSidebar" class="icon-button mobile-only" aria-label="Close menu">×</button>
+      <div class="field">
+        <label for="authPassword">Password</label>
+        <input id="authPassword" type="password" placeholder="At least 6 characters" autocomplete="current-password">
       </div>
-      <div class="workspace-label">YOUR WORKSPACE</div>
-      <label class="select-wrap"><span class="sr-only">Choose business category</span>
-        <select id="categorySelect" aria-label="Business category">
-          <option value="general">◈ General Business</option>
-          <option value="retail">▣ Retail & Inventory</option>
-          <option value="restaurant">♨ Restaurant & Cafe</option>
-          <option value="services">✳ Services & Agency</option>
-          <option value="healthcare">✚ Healthcare</option>
-          <option value="education">▤ Education</option>
-          <option value="construction">⌂ Construction</option>
-          <option value="manufacturing">⚙ Manufacturing</option>
-          <option value="realestate">⌂ Real Estate</option>
-          <option value="transport">➜ Transport & Logistics</option>
-          <option value="agriculture">❋ Agriculture</option>
+      <div class="field">
+        <label for="authBusiness">Business category</label>
+        <select id="authBusiness">
+          <option value="general">General Business</option>
+          <option value="retail">Retail / Shop</option>
+          <option value="restaurant">Restaurant</option>
+          <option value="services">Services / Freelancer</option>
+          <option value="healthcare">Healthcare</option>
+          <option value="education">Education</option>
+          <option value="construction">Construction</option>
+          <option value="manufacturing">Manufacturing</option>
+          <option value="realestate">Real Estate</option>
+          <option value="transport">Transport / Logistics</option>
+          <option value="agriculture">Agriculture</option>
+          <option value="custom">Custom Category</option>
         </select>
-      </label>
-      <div id="categoryBadge" class="category-badge"><span id="categoryBadgeIcon">◈</span><span id="categoryBadgeName">General Business</span></div>
-      <div class="nav-caption">WORKSPACE</div>
-      <nav id="mainNav" class="main-nav" aria-label="Main navigation"></nav>
-      <div class="sidebar-bottom">
-        <button id="settingsNav" class="nav-item"><span class="nav-icon">⚙</span><span>Settings</span></button>
-        <div class="sidebar-profile">
-          <div id="userAvatar" class="avatar">N</div>
-          <div class="profile-copy"><strong id="sidebarUserName">Your account</strong><small id="sidebarUserEmail">Loading profile…</small></div>
-          <button id="signOutBtn" class="icon-button" title="Sign out" aria-label="Sign out">↪</button>
-        </div>
       </div>
-    </aside>
+      <div class="field hidden" id="customCategoryField">
+        <label for="authCustomCategory">Your category</label>
+        <input id="authCustomCategory" placeholder="Enter business category">
+      </div>
 
-    <div id="sidebarScrim" class="sidebar-scrim"></div>
-    <section class="main-area">
-      <header class="topbar">
-        <div class="topbar-left">
-          <button id="openSidebar" class="icon-button mobile-only" aria-label="Open menu">☰</button>
-          <div><div id="breadcrumb" class="breadcrumb">Workspace / Overview</div><h1 id="pageTitle">Overview</h1></div>
-        </div>
-        <div class="topbar-actions">
-          <span id="topCategoryTag" class="top-category-tag">General Business</span>
-          <button id="refreshBtn" class="icon-button" title="Refresh data" aria-label="Refresh data">↻</button>
-          <div class="top-user"><div id="topAvatar" class="avatar avatar-small">N</div><span id="topUserName">Account</span></div>
-        </div>
-      </header>
-
-      <main id="pageContent" class="page-content">
-        <div class="loading-state"><span class="spinner"></span><p>Loading your workspace…</p></div>
-      </main>
-      <footer class="app-footer"><span>NEXORA Business Suite</span><span>v2.3.0 · Your work, in sync</span></footer>
+      <div class="button-row">
+        <button id="loginBtn" class="btn primary">Sign in</button>
+        <button id="registerBtn" class="btn">Create account</button>
+      </div>
+      <button id="googleBtn" class="btn google">Continue with Google</button>
+      <button id="resetBtn" class="text-btn">Forgot password?</button>
+      <p id="authMessage" class="message" role="status"></p>
     </section>
   </div>
 
-  <dialog id="recordDialog" class="record-dialog">
-    <form id="recordForm" method="dialog">
-      <div class="dialog-header"><div><span class="eyebrow" id="dialogEyebrow">WORKSPACE RECORD</span><h2 id="dialogTitle">Add record</h2></div><button type="button" id="closeDialog" class="icon-button" aria-label="Close dialog">×</button></div>
-      <div id="recordFields" class="form-grid"></div>
-      <div class="dialog-actions"><button type="button" id="cancelDialog" class="btn btn-soft">Cancel</button><button id="saveRecordBtn" type="submit" class="btn btn-primary">Save record</button></div>
-    </form>
-  </dialog>
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark small">N</span><span>NEXORA</span></div>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav id="navigation">
+        <button data-page="dashboard" class="nav-item active">◈ <span>Dashboard</span></button>
+        <button data-page="transactions" class="nav-item">↗ <span>Transactions</span></button>
+        <button data-page="customers" class="nav-item">◎ <span>Customers</span></button>
+        <button data-page="suppliers" class="nav-item">⇄ <span>Suppliers</span></button>
+        <button data-page="inventory" class="nav-item">▦ <span>Inventory</span></button>
+        <button data-page="projects" class="nav-item">▤ <span>Projects</span></button>
+        <button data-page="invoices" class="nav-item">▧ <span>Invoices</span></button>
+        <button data-page="appointments" class="nav-item">◷ <span>Appointments</span></button>
+        <button data-page="team" class="nav-item">♙ <span>Team & Tasks</span></button>
+        <button data-page="reports" class="nav-item">▥ <span>Reports</span></button>
+        <button data-page="settings" class="nav-item">⚙ <span>Settings</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-mini"><div class="avatar" id="userAvatar">N</div><div><strong id="userName">User</strong><small id="userEmail"></small></div></div>
+        <button id="logoutBtn" class="btn logout">Sign out</button>
+      </div>
+    </aside>
 
-  <dialog id="confirmDialog" class="record-dialog confirm-dialog">
-    <form method="dialog"><div class="dialog-header"><div><span class="eyebrow">PLEASE CONFIRM</span><h2 id="confirmTitle">Delete record?</h2></div></div><p id="confirmMessage" class="muted">This action cannot be undone.</p><div class="dialog-actions"><button value="cancel" class="btn btn-soft">Cancel</button><button id="confirmAction" value="confirm" class="btn btn-danger">Delete</button></div></form>
+    <main class="main">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn" aria-label="Toggle menu">☰</button>
+        <div><p class="eyebrow" id="pageEyebrow">BUSINESS OVERVIEW</p><h2 id="pageTitle">Dashboard</h2></div>
+        <div class="top-actions">
+          <span id="categoryBadge" class="category-badge">General Business</span>
+          <button id="themeBtn" class="icon-btn" title="Toggle theme">◐</button>
+        </div>
+      </header>
+      <section id="pageContent" class="page-content"></section>
+      <footer>NEXORA <span id="appVersion">v2.3.0</span> · Business Workspace</footer>
+    </main>
+  </div>
+
+  <dialog id="recordDialog" class="dialog">
+    <form id="recordForm">
+      <div class="dialog-head"><h3 id="dialogTitle">New record</h3><button type="button" id="closeDialog" class="icon-btn">✕</button></div>
+      <div id="recordFields" class="form-grid"></div>
+      <div class="dialog-actions"><button type="button" id="cancelRecord" class="btn">Cancel</button><button class="btn primary" type="submit">Save record</button></div>
+      <p id="recordMessage" class="message"></p>
+    </form>
   </dialog>
 
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+```

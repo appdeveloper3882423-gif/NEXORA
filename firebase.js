@@ -1,8 +1,20 @@
 
-// NEXORA Firebase Configuration
+// ============================================================
+// NEXORA — Firebase Configuration
+// Version 2.4.0
+// Email/Password + Google Authentication + Firestore
+// ============================================================
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+import {
+  getAuth,
+  GoogleAuthProvider
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+  getFirestore
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAFXYYPpSruHpV52vNJaiJTNDrBZYZOOhs",
@@ -14,12 +26,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 const auth = getAuth(app);
 const db = getFirestore(app);
+
 const googleProvider = new GoogleAuthProvider();
 
 googleProvider.setCustomParameters({
   prompt: "select_account"
 });
 
-export { app, auth, db, googleProvider };
+export {
+  app,
+  auth,
+  db,
+  googleProvider
+};

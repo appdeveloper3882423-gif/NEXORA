@@ -1,10 +1,3 @@
-
-// ============================================================
-// NEXORA — Firebase Configuration
-// Version 2.4.0
-// Email/Password + Google Authentication + Firestore
-// ============================================================
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
@@ -26,7 +19,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-
 const auth = getAuth(app);
 const db = getFirestore(app);
 
